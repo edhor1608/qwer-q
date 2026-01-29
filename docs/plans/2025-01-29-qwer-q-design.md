@@ -146,35 +146,66 @@ tRPC-inspired "actions over MQ".
 - Binary efficiency
 - Don't build a schema language when building a protocol
 
+### 8. Security: Open by Default
+| Aspect | Decision |
+|--------|----------|
+| **Default** | No auth required |
+| **Production** | Opt-in via config/env vars |
+
+**Rationale:** "docker run and it works" is the headline. Clear warnings when running without auth.
+
+### 9. Observability: Prometheus Metrics
+| Aspect | Decision |
+|--------|----------|
+| **Metrics** | Prometheus `/metrics` endpoint |
+| **Web UI** | Deferred to post-v1 |
+| **Logs** | Structured JSON |
+
+### 10. Schema Registration: CLI + API
+| Aspect | Decision |
+|--------|----------|
+| **Primary** | CLI tool (`qwer-q schema register`) |
+| **Underlying** | Protocol API for programmatic use |
+
+### 11. Validation: Broker-Side
+| Aspect | Decision |
+|--------|----------|
+| **Authority** | Broker validates all messages |
+| **Client libs** | Validate as convenience (fail-fast) |
+
+### 12. Schema Evolution: Backward Compatible
+| Aspect | Decision |
+|--------|----------|
+| **Default** | Backward compatible |
+| **Allowed** | Add optional fields, deprecate |
+| **Rejected** | Remove fields, change types |
+
+### 13. Queue Creation: Auto with Schema Binding
+| Aspect | Decision |
+|--------|----------|
+| **Model** | Register schema first, queue auto-creates on first publish |
+| **Unknown queue** | Rejected (no schema = no queue) |
+
+### 14. Failed Messages: Configurable, DLQ Default
+| Aspect | Decision |
+|--------|----------|
+| **Default** | Move to `<queue>.dlq` after N retries |
+| **Options** | `dlq` (default), `drop`, `infinite` |
+
 ---
 
 ## Decisions Pending
 
-### Protocol Details
+### Protocol Details (implementation phase)
 - [ ] Frame format (length prefix, headers, payload)
 - [ ] Command set (PUBLISH, CONSUME, ACK, etc.)
 - [ ] Protocol versioning scheme
-- [ ] TLS strategy
 
-### Schema Registry UX
-- [ ] Registration UX (CLI, API, file-based)
-- [ ] Compatibility rules (backward/forward/full)
-- [ ] Where validation happens (producer, broker, consumer)
-
-### Security
-- [ ] Local/dev: open by default?
-- [ ] Prod: TLS + auth strategy
-- [ ] ACLs per queue/type
-
-### Observability
-- [ ] Metrics endpoint format
-- [ ] Health endpoints
-- [ ] Logging strategy
-
-### Clustering (post-MVP)
-- [ ] Single-node first, HA later
-- [ ] Replication strategy
-- [ ] Consensus (Raft-like)
+### Post-v1 Features
+- [ ] Web UI dashboard
+- [ ] Consumer groups
+- [ ] Clustering / HA
+- [ ] Stream mode (optional log semantics)
 
 ---
 
@@ -198,11 +229,9 @@ tRPC-inspired "actions over MQ".
 
 ---
 
-## Open Questions to Explore
+## Open Questions (implementation phase)
 
-1. ~~What schema format best balances DX and performance?~~ → Protobuf
-2. How should the CLI/admin interface work?
-3. ~~What's the wire protocol?~~ → Custom binary over TCP
-4. How do clients discover schema types?
-5. What's the frame format for the custom protocol?
-6. How does schema registration work (CLI, API, file-watch)?
+1. Frame format for custom protocol (length prefix, headers, payload structure)
+2. Exact command set and opcodes
+3. Client library design for Go and TypeScript
+4. Embedded DB choice: BadgerDB vs bbolt vs other
