@@ -192,6 +192,27 @@ tRPC-inspired "actions over MQ".
 | **Default** | Move to `<queue>.dlq` after N retries |
 | **Options** | `dlq` (default), `drop`, `infinite` |
 
+### 15. Built-in Request/Reply
+| Aspect | Decision |
+|--------|----------|
+| **Feature** | Native `CALL` command for RPC-style patterns |
+| **Benefit** | "Type-safe RPC over durable queue" |
+
+**Rationale:** Killer feature for standalone use. Gateway can use this for QWER-Q, implement manually for other broker adapters.
+
+### 16. Message Ordering: Best-Effort FIFO
+| Aspect | Decision |
+|--------|----------|
+| **v1** | Best-effort FIFO, no strict guarantees |
+| **Future** | Ordering keys (same key → same consumer) |
+
+### 17. Backpressure: Max Size + Reject
+| Aspect | Decision |
+|--------|----------|
+| **Model** | Configurable max queue size |
+| **On full** | Reject publish with clear error |
+| **Default** | Generous limit (e.g., 1M messages or 1GB) |
+
 ---
 
 ## Decisions Pending
@@ -204,6 +225,7 @@ tRPC-inspired "actions over MQ".
 ### Post-v1 Features
 - [ ] Web UI dashboard
 - [ ] Consumer groups
+- [ ] Ordering keys (partition-like routing)
 - [ ] Clustering / HA
 - [ ] Stream mode (optional log semantics)
 

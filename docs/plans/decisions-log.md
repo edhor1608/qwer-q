@@ -384,3 +384,89 @@ Configurable per queue, with dead letter queue (DLQ) as default.
 - DLQ auto-created with same schema as source queue
 - Queue config options: `dlq` (default), `drop`, `infinite`
 - DLQ is a regular queue — can consume, inspect, replay
+
+---
+
+## DEC-015: Built-in Request/Reply Primitive
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+The "typed actions" vision implies request/response, not just fire-and-forget:
+1. Correlation ID + reply queue — classic, clunky
+2. Built-in CALL command — broker handles plumbing
+3. Leave to gateway layer — keeps broker simple
+
+### Decision
+Built-in request/reply primitive at broker level.
+
+### Rationale
+- "Type-safe RPC over durable queue" is a killer feature
+- Gateway can use this for QWER-Q, implement manually for other brokers
+- Doesn't break two-project split — enhances it
+- Great standalone DX
+
+### Consequences
+- New command: `CALL` (publish + wait for response)
+- Broker manages correlation IDs and reply routing
+- Timeout handling built-in
+- Response schema can be part of queue schema definition
+
+---
+
+## DEC-016: Best-Effort FIFO Ordering
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Message ordering with multiple consumers:
+1. Best-effort FIFO — no strict guarantees
+2. Ordering key — same key to same consumer
+3. Strict single-consumer mode
+
+### Decision
+Best-effort FIFO for v1. Ordering keys as future feature.
+
+### Rationale
+- Multiple consumers inherently break strict ordering
+- Most use cases tolerate this
+- Keeps v1 simple
+- Can add ordering keys in v1.1 if users need it
+
+### Consequences
+- Messages delivered roughly in order within a queue
+- No guarantees with competing consumers
+- Redelivered messages go to back of queue
+
+### Follow-up: Ordering Keys (post-v1)
+- Messages with same key routed to same consumer
+- Enables ordered processing for related messages
+- Similar to Kafka partition keys
+
+---
+
+## DEC-017: Max Queue Size with Reject on Full
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Backpressure when queue grows unbounded:
+1. Unlimited — disk fills eventually
+2. Max size, reject on full — clear error
+3. Oldest-drop — lossy
+4. Producer blocking — TCP backpressure
+
+### Decision
+Configurable max queue size. Reject publishes when full.
+
+### Rationale
+- Clear error to producer (can handle/retry)
+- No silent data loss
+- Predictable resource usage
+- Default can be generous (e.g., 1M messages or 1GB)
+
+### Consequences
+- Queue config: `max_messages` and/or `max_bytes`
+- Publish to full queue returns error
+- Producer responsible for backoff/retry
+- Monitoring alert: "queue near capacity"
