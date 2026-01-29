@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 )
 
@@ -34,5 +35,38 @@ func TestEncodeFrame(t *testing.T) {
 	// Check payload
 	if !bytes.Equal(frame[6:], payload) {
 		t.Errorf("payload = %v, want %v", frame[6:], payload)
+	}
+}
+
+func TestDecodeFrame(t *testing.T) {
+	original := []byte("test payload")
+	encoded := EncodeFrame(OpMessage, original)
+
+	reader := bytes.NewReader(encoded)
+	frame, err := DecodeFrame(reader)
+	if err != nil {
+		t.Fatalf("DecodeFrame error: %v", err)
+	}
+
+	if frame.Version != ProtocolVersion {
+		t.Errorf("version = %d, want %d", frame.Version, ProtocolVersion)
+	}
+	if frame.OpCode != OpMessage {
+		t.Errorf("opcode = %x, want %x", frame.OpCode, OpMessage)
+	}
+	if !bytes.Equal(frame.Payload, original) {
+		t.Errorf("payload = %v, want %v", frame.Payload, original)
+	}
+}
+
+func TestDecodeFrameMaxSize(t *testing.T) {
+	// Create a frame claiming to be too large
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, MaxFrameSize+1)
+
+	reader := bytes.NewReader(buf)
+	_, err := DecodeFrame(reader)
+	if err != ErrFrameTooLarge {
+		t.Errorf("error = %v, want ErrFrameTooLarge", err)
 	}
 }
