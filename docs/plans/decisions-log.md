@@ -186,3 +186,201 @@ Protobuf.
 - Users need protoc or buf for codegen
 - Schema registry stores protobuf descriptors
 - Wire format is protobuf-encoded messages
+
+---
+
+## DEC-008: Open by Default, Opt-in Auth
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Security model options:
+1. Open by default, opt-in auth — best DX, risk of running open in prod
+2. Secure by default, opt-out for dev — safer, worse first-run DX
+3. Auto-detect environment — magic that can surprise
+
+### Decision
+Open by default, opt-in auth.
+
+### Rationale
+- "docker run and it works" is the headline feature
+- Similar to Redis, NATS default behavior
+- Clear warnings in logs when running without auth
+- Auth enabled via config file or env vars
+
+### Consequences
+- Must print clear warnings: "Running without auth - not for production"
+- Document secure setup prominently
+- Auth options: token-based, mTLS (later)
+
+---
+
+## DEC-009: Prometheus Metrics, Web UI Later
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Observability options:
+1. Prometheus `/metrics` endpoint — industry standard
+2. Built-in web dashboard — self-contained
+3. Structured logs only — simplest, limited visibility
+4. Both metrics + web UI — best visibility, more scope
+
+### Decision
+Prometheus `/metrics` endpoint for v1. Web UI as follow-up feature.
+
+### Rationale
+- `/metrics` is minimal code (~100 lines)
+- Everyone has Prometheus or compatible scraper
+- Web UI adds scope — defer to v1.1 or later
+- Structured JSON logs included regardless
+
+### Consequences
+- Expose `/metrics` on separate HTTP port (or same with path routing)
+- Track: queue depth, publish rate, consume rate, ack rate, latency histograms
+- Provide example Grafana dashboard in docs
+
+### Follow-up: Built-in Web UI (post-v1)
+- Simple dashboard showing queue stats, connected clients
+- No external dependencies (embedded static assets)
+- Optional — disabled by default or separate binary
+
+---
+
+## DEC-010: CLI + API for Schema Registration
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+How users register message types:
+1. API-first — programmatic, requires code
+2. File-based — drop files, broker watches
+3. CLI tool — explicit, good for CI/CD
+4. Embedded in publish — auto-register, implicit magic
+
+### Decision
+CLI tool as primary interface, API as underlying mechanism.
+
+### Rationale
+- CLI is explicit — fits CI/CD pipelines
+- API underneath enables programmatic use when needed
+- Avoids implicit magic that's hard to debug
+- File-watching can be added later if requested
+
+### Consequences
+- Build `qwer-q` CLI with schema subcommands
+- Commands: `schema register`, `schema list`, `schema get`, `schema check`
+- API exposed via custom protocol (schema management commands)
+- Schema stored in embedded DB alongside queue data
+
+---
+
+## DEC-011: Broker-Side Schema Validation
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Where to validate messages against schema:
+1. Producer-side only — fast, but rogue clients can send garbage
+2. Broker-side only — guaranteed correctness, CPU cost
+3. Both — safest, redundant work
+4. Configurable per queue — flexible, more config
+
+### Decision
+Broker-side validation as authoritative. Client libs validate as convenience (fail-fast optimization).
+
+### Rationale
+- "Typed MQ" promise means broker enforces contracts
+- Protobuf validation is fast — not a real bottleneck
+- Trusting clients breaks the guarantee
+- Client libs can validate to fail fast, but broker is source of truth
+
+### Consequences
+- Broker parses and validates every published message
+- Invalid messages rejected with clear error (schema mismatch, field type, etc.)
+- Client libs should validate before send (optimization, better errors)
+- Slight CPU overhead on broker — acceptable for correctness
+
+---
+
+## DEC-012: Backward Compatible Schema Evolution
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Schema compatibility rules when updating:
+1. Backward — new schema reads old messages
+2. Forward — old schema reads new messages
+3. Full — both directions
+4. None — breaking changes allowed
+5. Configurable per schema
+
+### Decision
+Backward compatible as default.
+
+### Rationale
+- Most common real-world pattern
+- Protobuf naturally supports this (optional fields, field numbers)
+- Consumers can upgrade before producers
+- Prevents accidental breaking changes
+
+### Consequences
+- Schema registry checks compatibility on update
+- Allowed: add optional fields, deprecate fields
+- Rejected: remove fields, change field types, renumber fields
+- Can add "full" or "none" modes later if needed
+
+---
+
+## DEC-013: Auto-Create Queues with Schema Binding
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Queue creation model:
+1. Explicit only — must create before use
+2. Auto-create on first publish — zero setup, typo risk
+3. Auto-create with schema binding — dynamic but controlled
+
+### Decision
+Auto-create queues only when schema is registered for that queue name.
+
+### Rationale
+- Typed MQ means every queue has a schema
+- Register schema first (explicit) → queue auto-creates on publish
+- Typo in queue name? Rejected — no schema registered
+- Convenience of auto-create with safety of explicit binding
+
+### Consequences
+- Schema registration binds schema to queue name
+- First publish to queue creates it if schema exists
+- Publish to unknown queue name → error
+- Provides typo protection and enforces schema-first workflow
+
+---
+
+## DEC-014: Configurable Failed Message Handling, DLQ Default
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+What happens when messages fail repeatedly:
+1. Dead letter queue — move to DLQ after N retries
+2. Drop — discard after N retries
+3. Infinite retries — keep trying forever
+4. Configurable per queue
+
+### Decision
+Configurable per queue, with dead letter queue (DLQ) as default.
+
+### Rationale
+- DLQ is industry standard, preserves failed messages
+- Some use cases may want drop (high-volume, ephemeral)
+- Some may want infinite (must-process guarantees)
+- Sensible default with escape hatches
+
+### Consequences
+- Default: after N retries (configurable, default 3), move to `<queue>.dlq`
+- DLQ auto-created with same schema as source queue
+- Queue config options: `dlq` (default), `drop`, `infinite`
+- DLQ is a regular queue — can consume, inspect, replay
