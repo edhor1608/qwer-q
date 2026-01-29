@@ -41,6 +41,31 @@ var (
 		Help:    "Latency of publish operations",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"queue"})
+
+	messagesDLQ = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "qwerq_messages_dlq_total",
+		Help: "Total number of messages sent to dead letter queue",
+	}, []string{"queue"})
+
+	duplicateMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "qwerq_duplicate_messages_total",
+		Help: "Total number of duplicate messages rejected",
+	}, []string{"queue"})
+
+	queueFullErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "qwerq_queue_full_errors_total",
+		Help: "Total number of queue full errors",
+	}, []string{"queue"})
+
+	callRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "qwerq_call_requests_total",
+		Help: "Total number of CALL requests",
+	}, []string{"queue"})
+
+	callTimeouts = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "qwerq_call_timeouts_total",
+		Help: "Total number of CALL timeouts",
+	}, []string{"queue"})
 )
 
 // RecordPublish records a message publish.
@@ -72,4 +97,29 @@ func UpdateQueueDepth(queue string, depth int) {
 // UpdateInFlightCount updates the in-flight count gauge.
 func UpdateInFlightCount(queue string, count int) {
 	inFlightCount.WithLabelValues(queue).Set(float64(count))
+}
+
+// RecordDLQ records a message sent to dead letter queue.
+func RecordDLQ(queue string) {
+	messagesDLQ.WithLabelValues(queue).Inc()
+}
+
+// RecordDuplicateMessage records a duplicate message rejection.
+func RecordDuplicateMessage(queue string) {
+	duplicateMessages.WithLabelValues(queue).Inc()
+}
+
+// RecordQueueFull records a queue full error.
+func RecordQueueFull(queue string) {
+	queueFullErrors.WithLabelValues(queue).Inc()
+}
+
+// RecordCallRequest records a CALL request.
+func RecordCallRequest(queue string) {
+	callRequests.WithLabelValues(queue).Inc()
+}
+
+// RecordCallTimeout records a CALL timeout.
+func RecordCallTimeout(queue string) {
+	callTimeouts.WithLabelValues(queue).Inc()
 }

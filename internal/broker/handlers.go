@@ -11,6 +11,13 @@ const defaultVisibilityTimeout = 30 * time.Second
 
 // HandlePublish processes a publish request.
 func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishResponse, error) {
+	// Check idempotency key
+	if b.dedup != nil {
+		if err := b.dedup.Check(req.GetIdempotencyKey()); err != nil {
+			return nil, err
+		}
+	}
+
 	msgID := req.GetMessageId()
 	if msgID == "" {
 		msgID = NewULID()
@@ -26,14 +33,16 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		VisibleAt:   time.Now(),
 	}
 
+	q := b.GetOrCreateQueue(req.GetQueue())
+	if err := q.Enqueue(msg); err != nil {
+		return nil, err
+	}
+
 	if b.storage != nil {
 		if err := b.storage.SaveMessage(msg); err != nil {
 			return nil, err
 		}
 	}
-
-	q := b.GetOrCreateQueue(req.GetQueue())
-	q.Enqueue(msg)
 
 	return &protocol.PublishResponse{MessageId: msgID}, nil
 }
@@ -70,7 +79,43 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName string) bool {
 	if q == nil {
 		return false
 	}
-	return q.Nack(req.GetMessageId(), req.GetRequeue())
+
+	result := q.Nack(req.GetMessageId(), req.GetRequeue())
+	if !result.Found {
+		return false
+	}
+
+	// Move to DLQ if needed
+	if result.ToDLQ && result.Message != nil {
+		dlqName := DLQName(queueName)
+		dlq := b.GetOrCreateQueue(dlqName)
+		result.Message.Queue = dlqName
+		result.Message.VisibleAt = time.Now()
+		dlq.Enqueue(result.Message) // Ignore error - DLQ should always accept
+
+		if b.storage != nil {
+			// Delete from original queue storage
+			b.storage.DeleteMessage(result.Message.ID)
+			// Save to DLQ storage
+			b.storage.SaveMessage(result.Message)
+		}
+	}
+
+	return true
+}
+
+// HandleExtendVisibility processes a visibility timeout extension request.
+func (b *Broker) HandleExtendVisibility(req *protocol.ExtendVisibilityRequest, queueName string) (time.Time, bool) {
+	q := b.GetQueue(queueName)
+	if q == nil {
+		return time.Time{}, false
+	}
+	extension := time.Duration(req.GetExtensionSeconds()) * time.Second
+	newVisibleAt := q.ExtendVisibility(req.GetMessageId(), extension)
+	if newVisibleAt.IsZero() {
+		return time.Time{}, false
+	}
+	return newVisibleAt, true
 }
 
 // MessageToProto converts an internal Message to protocol Message.

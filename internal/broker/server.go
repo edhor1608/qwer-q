@@ -77,12 +77,13 @@ func (s *Server) Close() error {
 
 // connState tracks per-connection state.
 type connState struct {
-	queueName  string
-	clientAddr string
-	msgCh      <-chan *Message
-	stopCh     chan struct{}
-	deliverWg  sync.WaitGroup
-	writeMu    sync.Mutex
+	queueName   string
+	clientAddr  string
+	msgCh       <-chan *Message
+	stopCh      chan struct{}
+	deliverWg   sync.WaitGroup
+	writeMu     sync.Mutex
+	callManager *CallManager
 }
 
 func (s *Server) handleConn(conn net.Conn) {
@@ -105,6 +106,9 @@ func (s *Server) handleConn(conn net.Conn) {
 			if q != nil {
 				q.RemoveConsumer(state.msgCh)
 			}
+		}
+		if state.callManager != nil {
+			state.callManager.Close()
 		}
 	}()
 
@@ -136,6 +140,8 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 		return s.handleAck(frame.Payload, state)
 	case protocol.OpNack:
 		return s.handleNack(frame.Payload, state)
+	case protocol.OpExtendVisibility:
+		return s.handleExtendVisibility(frame.Payload, state)
 	case protocol.OpSchemaRegister:
 		return s.handleSchemaRegister(frame.Payload)
 	case protocol.OpSchemaGet:
@@ -144,6 +150,8 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 		return s.handleSchemaList()
 	case protocol.OpQueueList:
 		return s.handleQueueList()
+	case protocol.OpCall:
+		return s.handleCall(frame.Payload, state)
 	default:
 		return EncodeError(1, "unknown opcode")
 	}
@@ -263,6 +271,24 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 	return nil
 }
 
+func (s *Server) handleExtendVisibility(payload []byte, state *connState) []byte {
+	var req protocol.ExtendVisibilityRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	newVisibleAt, ok := s.broker.HandleExtendVisibility(&req, state.queueName)
+	if !ok {
+		return EncodeError(4, "message not found")
+	}
+
+	resp := &protocol.ExtendVisibilityResponse{
+		NewVisibleAt: newVisibleAt.UnixMilli(),
+	}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpExtendVisibilityAck, data)
+}
+
 func (s *Server) handleSchemaRegister(payload []byte) []byte {
 	var req protocol.SchemaRegisterRequest
 	if err := proto.Unmarshal(payload, &req); err != nil {
@@ -336,4 +362,27 @@ func (s *Server) handleQueueList() []byte {
 	resp := &protocol.QueueListResponse{Queues: queues}
 	data, _ := proto.Marshal(resp)
 	return protocol.EncodeFrame(protocol.OpQueueListResp, data)
+}
+
+func (s *Server) handleCall(payload []byte, state *connState) []byte {
+	var req protocol.CallRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	// Create call manager lazily
+	if state.callManager == nil {
+		state.callManager = NewCallManager(s.broker, state.clientAddr)
+	}
+
+	resp, err := state.callManager.Call(&req)
+	if err != nil {
+		if _, ok := err.(ErrCallTimeout); ok {
+			return EncodeError(8, "call timeout")
+		}
+		return EncodeError(3, err.Error())
+	}
+
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpCallResponse, data)
 }

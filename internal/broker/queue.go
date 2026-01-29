@@ -1,9 +1,16 @@
 package broker
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrQueueFull is returned when a queue is at capacity.
+var ErrQueueFull = errors.New("queue is full")
+
+// DefaultMaxQueueSize is the default maximum number of messages in a queue.
+const DefaultMaxQueueSize = 1_000_000
 
 // Consumer represents a message consumer channel.
 type Consumer struct {
@@ -13,20 +20,68 @@ type Consumer struct {
 
 // Queue is a thread-safe message queue.
 type Queue struct {
-	mu        sync.Mutex
-	name      string
-	messages  []*Message
-	inFlight  map[string]*Message
-	consumers []*Consumer
-	nextIdx   int // round-robin index
+	mu            sync.Mutex
+	name          string
+	messages      []*Message
+	inFlight      map[string]*Message
+	consumers     []*Consumer
+	nextIdx       int           // round-robin index
+	maxSize       int           // maximum number of messages (0 = unlimited)
+	failurePolicy FailurePolicy // what to do on max retries
+	maxRetries    uint32        // max delivery attempts before failure policy kicks in
 }
 
 // NewQueue creates a new queue with the given name.
 func NewQueue(name string) *Queue {
 	return &Queue{
-		name:     name,
-		inFlight: make(map[string]*Message),
+		name:          name,
+		inFlight:      make(map[string]*Message),
+		maxSize:       DefaultMaxQueueSize,
+		failurePolicy: FailurePolicyDLQ,
+		maxRetries:    DefaultMaxRetries,
 	}
+}
+
+// SetMaxSize sets the maximum queue size. 0 means unlimited.
+func (q *Queue) SetMaxSize(max int) {
+	q.mu.Lock()
+	q.maxSize = max
+	q.mu.Unlock()
+}
+
+// MaxSize returns the maximum queue size.
+func (q *Queue) MaxSize() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.maxSize
+}
+
+// SetFailurePolicy sets the failure policy.
+func (q *Queue) SetFailurePolicy(policy FailurePolicy) {
+	q.mu.Lock()
+	q.failurePolicy = policy
+	q.mu.Unlock()
+}
+
+// SetMaxRetries sets the max delivery attempts.
+func (q *Queue) SetMaxRetries(max uint32) {
+	q.mu.Lock()
+	q.maxRetries = max
+	q.mu.Unlock()
+}
+
+// FailurePolicy returns the current failure policy.
+func (q *Queue) FailurePolicy() FailurePolicy {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.failurePolicy
+}
+
+// MaxRetries returns the max delivery attempts.
+func (q *Queue) MaxRetries() uint32 {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.maxRetries
 }
 
 // Name returns the queue name.
@@ -34,15 +89,20 @@ func (q *Queue) Name() string {
 	return q.name
 }
 
-// Enqueue adds a message to the queue.
-func (q *Queue) Enqueue(msg *Message) {
+// Enqueue adds a message to the queue. Returns ErrQueueFull if at capacity.
+func (q *Queue) Enqueue(msg *Message) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.maxSize > 0 && len(q.messages) >= q.maxSize {
+		return ErrQueueFull
+	}
 	q.messages = append(q.messages, msg)
 	q.tryDeliver()
+	return nil
 }
 
 // EnqueueDirect adds a message without triggering storage save (for recovery).
+// It bypasses the max size check for recovery scenarios.
 func (q *Queue) EnqueueDirect(msg *Message) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -126,22 +186,49 @@ func (q *Queue) Ack(messageID string) bool {
 	return false
 }
 
+// NackResult indicates what happened to a nacked message.
+type NackResult struct {
+	Found   bool     // Was the message found?
+	Message *Message // The message (for DLQ handling)
+	ToDLQ   bool     // Should message go to DLQ?
+}
+
 // Nack negatively acknowledges a message.
-// If requeue is true, the message is put back in the queue.
-func (q *Queue) Nack(messageID string, requeue bool) bool {
+// If requeue is true, the message is put back in the queue (subject to retry limits).
+// Returns NackResult indicating what to do with the message.
+func (q *Queue) Nack(messageID string, requeue bool) NackResult {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
 	msg, ok := q.inFlight[messageID]
 	if !ok {
-		return false
+		return NackResult{Found: false}
 	}
 	delete(q.inFlight, messageID)
-	if requeue {
-		msg.VisibleAt = time.Now()
-		q.messages = append(q.messages, msg)
-		q.tryDeliver()
+
+	if !requeue {
+		// Explicit reject without requeue - send to DLQ if policy allows
+		if q.failurePolicy == FailurePolicyDLQ {
+			return NackResult{Found: true, Message: msg, ToDLQ: true}
+		}
+		return NackResult{Found: true, Message: msg, ToDLQ: false}
 	}
-	return true
+
+	// Check if we've exceeded max retries
+	if q.failurePolicy != FailurePolicyInfinite && msg.Attempt >= q.maxRetries {
+		switch q.failurePolicy {
+		case FailurePolicyDLQ:
+			return NackResult{Found: true, Message: msg, ToDLQ: true}
+		case FailurePolicyDrop:
+			return NackResult{Found: true, Message: msg, ToDLQ: false}
+		}
+	}
+
+	// Requeue the message
+	msg.VisibleAt = time.Now()
+	q.messages = append(q.messages, msg)
+	q.tryDeliver()
+	return NackResult{Found: true, Message: msg, ToDLQ: false}
 }
 
 // Len returns the number of messages in the queue (not in-flight).
@@ -171,4 +258,17 @@ func (q *Queue) RequeueExpired() {
 		}
 	}
 	q.tryDeliver()
+}
+
+// ExtendVisibility extends the visibility timeout for an in-flight message.
+// Returns the new visibility timestamp, or zero time if message not found.
+func (q *Queue) ExtendVisibility(messageID string, extension time.Duration) time.Time {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	msg, ok := q.inFlight[messageID]
+	if !ok {
+		return time.Time{}
+	}
+	msg.VisibleAt = time.Now().Add(extension)
+	return msg.VisibleAt
 }

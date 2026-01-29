@@ -10,10 +10,11 @@ import (
 
 // Broker manages queues and message routing.
 type Broker struct {
-	mu      sync.RWMutex
-	queues  map[string]*Queue
-	done    chan struct{}
-	storage storage.Storage
+	mu        sync.RWMutex
+	queues    map[string]*Queue
+	done      chan struct{}
+	storage   storage.Storage
+	dedup     *IdempotencyTracker
 }
 
 // BrokerOption configures a Broker.
@@ -29,6 +30,7 @@ func NewBroker(opts ...BrokerOption) *Broker {
 	b := &Broker{
 		queues: make(map[string]*Queue),
 		done:   make(chan struct{}),
+		dedup:  NewIdempotencyTracker(DefaultIdempotencyTTL),
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -58,6 +60,9 @@ func (b *Broker) reaper() {
 // Close stops the broker.
 func (b *Broker) Close() {
 	close(b.done)
+	if b.dedup != nil {
+		b.dedup.Close()
+	}
 	if b.storage != nil {
 		b.storage.Close()
 	}

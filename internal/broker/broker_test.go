@@ -362,3 +362,134 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 		t.Fatalf("expected 0 messages in storage after ack, got %d", len(messages))
 	}
 }
+
+func TestQueueBackpressure(t *testing.T) {
+	q := NewQueue("test")
+	q.SetMaxSize(3) // Small limit for testing
+
+	// Fill the queue
+	for i := 0; i < 3; i++ {
+		msg := &Message{ID: NewULID(), Payload: []byte("msg")}
+		if err := q.Enqueue(msg); err != nil {
+			t.Fatalf("enqueue %d failed: %v", i, err)
+		}
+	}
+
+	// Next enqueue should fail
+	msg := &Message{ID: NewULID(), Payload: []byte("overflow")}
+	if err := q.Enqueue(msg); err != ErrQueueFull {
+		t.Fatalf("expected ErrQueueFull, got %v", err)
+	}
+
+	// Verify queue length
+	if q.Len() != 3 {
+		t.Fatalf("expected length 3, got %d", q.Len())
+	}
+}
+
+func TestQueueBackpressureUnlimited(t *testing.T) {
+	q := NewQueue("test")
+	q.SetMaxSize(0) // Unlimited
+
+	// Should be able to enqueue many messages
+	for i := 0; i < 100; i++ {
+		msg := &Message{ID: NewULID(), Payload: []byte("msg")}
+		if err := q.Enqueue(msg); err != nil {
+			t.Fatalf("enqueue %d failed: %v", i, err)
+		}
+	}
+}
+
+func TestExtendVisibility(t *testing.T) {
+	q := NewQueue("test")
+
+	msg := &Message{ID: NewULID(), Payload: []byte("data")}
+	q.Enqueue(msg)
+
+	// Consume - sets initial visibility
+	ch := q.Dequeue(30 * time.Second)
+	<-ch
+
+	// Get initial visibility
+	initialVisible := time.Now().Add(30 * time.Second)
+
+	// Extend by 60 seconds
+	newVisible := q.ExtendVisibility(msg.ID, 60*time.Second)
+	if newVisible.IsZero() {
+		t.Fatal("extend visibility failed")
+	}
+
+	// New visibility should be roughly 60 seconds from now
+	expected := time.Now().Add(60 * time.Second)
+	if newVisible.Before(expected.Add(-time.Second)) || newVisible.After(expected.Add(time.Second)) {
+		t.Fatalf("expected ~%v, got %v", expected, newVisible)
+	}
+
+	// Should be later than initial
+	if !newVisible.After(initialVisible.Add(-32 * time.Second)) {
+		t.Fatal("new visibility should be later than initial")
+	}
+}
+
+func TestExtendVisibilityNotFound(t *testing.T) {
+	q := NewQueue("test")
+
+	// Try to extend non-existent message
+	result := q.ExtendVisibility("non-existent", 60*time.Second)
+	if !result.IsZero() {
+		t.Fatal("expected zero time for non-existent message")
+	}
+}
+
+func TestBrokerIdempotency(t *testing.T) {
+	b := NewBroker()
+	defer b.Close()
+
+	key := "unique-key-123"
+	req := &protocol.PublishRequest{
+		Queue:          "test-queue",
+		Payload:        []byte("data"),
+		IdempotencyKey: &key,
+	}
+
+	// First publish should succeed
+	resp, err := b.HandlePublish(req)
+	if err != nil {
+		t.Fatalf("first publish failed: %v", err)
+	}
+	if resp.MessageId == "" {
+		t.Fatal("expected message ID")
+	}
+
+	// Second publish with same key should fail
+	_, err = b.HandlePublish(req)
+	if err == nil {
+		t.Fatal("expected duplicate error")
+	}
+	if _, ok := err.(ErrDuplicateMessage); !ok {
+		t.Fatalf("expected ErrDuplicateMessage, got %T: %v", err, err)
+	}
+
+	// Different key should succeed
+	key2 := "different-key"
+	req2 := &protocol.PublishRequest{
+		Queue:          "test-queue",
+		Payload:        []byte("data2"),
+		IdempotencyKey: &key2,
+	}
+	if _, err := b.HandlePublish(req2); err != nil {
+		t.Fatalf("different key publish failed: %v", err)
+	}
+
+	// No idempotency key should always succeed
+	req3 := &protocol.PublishRequest{
+		Queue:   "test-queue",
+		Payload: []byte("data3"),
+	}
+	if _, err := b.HandlePublish(req3); err != nil {
+		t.Fatalf("no-key publish 1 failed: %v", err)
+	}
+	if _, err := b.HandlePublish(req3); err != nil {
+		t.Fatalf("no-key publish 2 failed: %v", err)
+	}
+}

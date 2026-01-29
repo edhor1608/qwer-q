@@ -78,3 +78,44 @@ message CallResponse {
   bytes payload = 1;
   map<string, string> headers = 2;
 }
+
+// SchemaListRequest requests all registered schemas.
+message SchemaListRequest {}
+
+// SchemaInfo describes a registered schema.
+message SchemaInfo {
+  string queue = 1;
+  string message_type = 2;
+  uint32 version = 3;
+}
+
+// SchemaListResponse returns all registered schemas.
+message SchemaListResponse {
+  repeated SchemaInfo schemas = 1;
+}
+
+// QueueListRequest requests all queues.
+message QueueListRequest {}
+
+// QueueInfo describes a queue.
+message QueueInfo {
+  string name = 1;
+  uint32 message_count = 2;
+  uint32 in_flight_count = 3;
+}
+
+// QueueListResponse returns all queues.
+message QueueListResponse {
+  repeated QueueInfo queues = 1;
+}
+
+// ExtendVisibilityRequest extends the visibility timeout for an in-flight message.
+message ExtendVisibilityRequest {
+  string message_id = 1;
+  uint32 extension_seconds = 2;  // Additional seconds to extend visibility
+}
+
+// ExtendVisibilityResponse confirms the extension.
+message ExtendVisibilityResponse {
+  int64 new_visible_at = 1;  // New visibility timestamp (Unix millis)
+}
