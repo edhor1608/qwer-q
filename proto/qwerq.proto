@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package qwerq;
+
+option go_package = "github.com/jonas/qwer-q/internal/protocol";
+
+// PublishRequest is sent by client to publish a message.
+message PublishRequest {
+  string queue = 1;
+  bytes payload = 2;
+  map<string, string> headers = 3;
+  optional string message_id = 4;      // Client-provided, or broker generates
+  optional string idempotency_key = 5; // For deduplication
+}
+
+// PublishResponse confirms a publish.
+message PublishResponse {
+  string message_id = 1;
+}
+
+// ConsumeRequest starts consuming from a queue.
+message ConsumeRequest {
+  string queue = 1;
+  uint32 prefetch = 2;           // Max unacked messages (default 1)
+  uint32 visibility_timeout = 3; // Seconds before redelivery (default 30)
+}
+
+// Message is delivered to consumers.
+message Message {
+  string message_id = 1;
+  string queue = 2;
+  bytes payload = 3;
+  map<string, string> headers = 4;
+  uint32 attempt = 5;           // Delivery attempt number (1-based)
+  int64 published_at = 6;       // Unix timestamp millis
+}
+
+// AckRequest acknowledges a message.
+message AckRequest {
+  string message_id = 1;
+}
+
+// NackRequest negatively acknowledges (requeue).
+message NackRequest {
+  string message_id = 1;
+  bool requeue = 2;  // If false, send to DLQ
+}
+
+// ErrorResponse is sent on errors.
+message ErrorResponse {
+  uint32 code = 1;
+  string message = 2;
+}
+
+// SchemaRegisterRequest registers a schema for a queue.
+message SchemaRegisterRequest {
+  string queue = 1;
+  bytes descriptor = 2;  // Protobuf FileDescriptorSet
+  string message_type = 3; // Fully qualified message name
+}
+
+// SchemaRegisterResponse confirms registration.
+message SchemaRegisterResponse {
+  uint32 schema_id = 1;
+  uint32 version = 2;
+}
+
+// CallRequest is RPC-style publish with reply.
+message CallRequest {
+  string queue = 1;
+  bytes payload = 2;
+  map<string, string> headers = 3;
+  uint32 timeout_ms = 4;  // How long to wait for reply
+}
+
+// CallResponse is the reply to a Call.
+message CallResponse {
+  bytes payload = 1;
+  map<string, string> headers = 2;
+}
