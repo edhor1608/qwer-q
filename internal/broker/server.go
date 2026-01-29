@@ -4,14 +4,17 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/jonas/qwer-q/internal/protocol"
+	"github.com/jonas/qwer-q/internal/schema"
 	"google.golang.org/protobuf/proto"
 )
 
 // Server is a TCP server for the broker.
 type Server struct {
 	broker   *Broker
+	registry *schema.Registry
 	listener net.Listener
 	wg       sync.WaitGroup
 	done     chan struct{}
@@ -20,9 +23,15 @@ type Server struct {
 // NewServer creates a new server with the given broker.
 func NewServer(broker *Broker) *Server {
 	return &Server{
-		broker: broker,
-		done:   make(chan struct{}),
+		broker:   broker,
+		registry: schema.NewRegistry(),
+		done:     make(chan struct{}),
 	}
+}
+
+// Registry returns the schema registry.
+func (s *Server) Registry() *schema.Registry {
+	return s.registry
 }
 
 // ListenAndServe starts the server on the given address.
@@ -121,20 +130,42 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 		return s.handleAck(frame.Payload, state)
 	case protocol.OpNack:
 		return s.handleNack(frame.Payload, state)
+	case protocol.OpSchemaRegister:
+		return s.handleSchemaRegister(frame.Payload)
+	case protocol.OpSchemaGet:
+		return s.handleSchemaGet(frame.Payload)
+	case protocol.OpSchemaList:
+		return s.handleSchemaList()
+	case protocol.OpQueueList:
+		return s.handleQueueList()
 	default:
 		return EncodeError(1, "unknown opcode")
 	}
 }
 
 func (s *Server) handlePublish(payload []byte) []byte {
+	start := time.Now()
 	var req protocol.PublishRequest
 	if err := proto.Unmarshal(payload, &req); err != nil {
 		return EncodeError(2, "invalid request")
 	}
 
+	// DEC-013: Queue only exists if schema is registered
+	// Validate message against schema
+	if err := s.registry.Validate(req.GetQueue(), req.GetPayload()); err != nil {
+		return EncodeError(5, "schema validation failed: "+err.Error())
+	}
+
 	resp, err := s.broker.HandlePublish(&req)
 	if err != nil {
 		return EncodeError(3, err.Error())
+	}
+
+	q := s.broker.GetQueue(req.GetQueue())
+	RecordPublish(req.GetQueue(), time.Since(start).Seconds())
+	if q != nil {
+		UpdateQueueDepth(req.GetQueue(), q.Len())
+		UpdateInFlightCount(req.GetQueue(), q.InFlightLen())
 	}
 
 	data, _ := proto.Marshal(resp)
@@ -160,6 +191,13 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 				if !ok {
 					return
 				}
+				RecordConsume(state.queueName)
+				q := s.broker.GetQueue(state.queueName)
+				if q != nil {
+					UpdateQueueDepth(state.queueName, q.Len())
+					UpdateInFlightCount(state.queueName, q.InFlightLen())
+				}
+
 				protoMsg := MessageToProto(msg)
 				data, _ := proto.Marshal(protoMsg)
 				frame := protocol.EncodeFrame(protocol.OpMessage, data)
@@ -185,6 +223,13 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 	if !s.broker.HandleAck(&req, state.queueName) {
 		return EncodeError(4, "message not found")
 	}
+
+	RecordAck(state.queueName)
+	q := s.broker.GetQueue(state.queueName)
+	if q != nil {
+		UpdateQueueDepth(state.queueName, q.Len())
+		UpdateInFlightCount(state.queueName, q.InFlightLen())
+	}
 	return nil
 }
 
@@ -197,5 +242,87 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 	if !s.broker.HandleNack(&req, state.queueName) {
 		return EncodeError(4, "message not found")
 	}
+
+	RecordNack(state.queueName)
+	q := s.broker.GetQueue(state.queueName)
+	if q != nil {
+		UpdateQueueDepth(state.queueName, q.Len())
+		UpdateInFlightCount(state.queueName, q.InFlightLen())
+	}
 	return nil
+}
+
+func (s *Server) handleSchemaRegister(payload []byte) []byte {
+	var req protocol.SchemaRegisterRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	version, err := s.registry.Register(req.GetQueue(), req.GetDescriptor_(), req.GetMessageType())
+	if err != nil {
+		return EncodeError(6, "schema registration failed: "+err.Error())
+	}
+
+	resp := &protocol.SchemaRegisterResponse{
+		SchemaId: 0, // Not used currently
+		Version:  version,
+	}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpSchemaResponse, data)
+}
+
+func (s *Server) handleSchemaGet(payload []byte) []byte {
+	var req protocol.SchemaRegisterRequest // Reuse for queue name
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	sch, err := s.registry.Get(req.GetQueue())
+	if err != nil {
+		return EncodeError(7, "schema not found")
+	}
+
+	resp := &protocol.SchemaRegisterResponse{
+		Version: sch.Version,
+	}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpSchemaResponse, data)
+}
+
+func (s *Server) handleSchemaList() []byte {
+	names := s.registry.List()
+	schemas := make([]*protocol.SchemaInfo, 0, len(names))
+	for _, name := range names {
+		sch, err := s.registry.Get(name)
+		if err != nil {
+			continue
+		}
+		schemas = append(schemas, &protocol.SchemaInfo{
+			Queue:       sch.Queue,
+			MessageType: sch.MessageType,
+			Version:     sch.Version,
+		})
+	}
+	resp := &protocol.SchemaListResponse{Schemas: schemas}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpSchemaListResp, data)
+}
+
+func (s *Server) handleQueueList() []byte {
+	names := s.broker.ListQueues()
+	queues := make([]*protocol.QueueInfo, 0, len(names))
+	for _, name := range names {
+		q := s.broker.GetQueue(name)
+		if q == nil {
+			continue
+		}
+		queues = append(queues, &protocol.QueueInfo{
+			Name:          name,
+			MessageCount:  uint32(q.Len()),
+			InFlightCount: uint32(q.InFlightLen()),
+		})
+	}
+	resp := &protocol.QueueListResponse{Queues: queues}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpQueueListResp, data)
 }
