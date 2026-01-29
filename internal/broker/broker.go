@@ -4,20 +4,34 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/jonas/qwer-q/internal/storage"
 )
 
 // Broker manages queues and message routing.
 type Broker struct {
-	mu     sync.RWMutex
-	queues map[string]*Queue
-	done   chan struct{}
+	mu      sync.RWMutex
+	queues  map[string]*Queue
+	done    chan struct{}
+	storage storage.Storage
+}
+
+// BrokerOption configures a Broker.
+type BrokerOption func(*Broker)
+
+// WithStorage sets the storage backend.
+func WithStorage(s storage.Storage) BrokerOption {
+	return func(b *Broker) { b.storage = s }
 }
 
 // NewBroker creates a new broker.
-func NewBroker() *Broker {
+func NewBroker(opts ...BrokerOption) *Broker {
 	b := &Broker{
 		queues: make(map[string]*Queue),
 		done:   make(chan struct{}),
+	}
+	for _, opt := range opts {
+		opt(b)
 	}
 	go b.reaper()
 	return b
@@ -44,6 +58,45 @@ func (b *Broker) reaper() {
 // Close stops the broker.
 func (b *Broker) Close() {
 	close(b.done)
+	if b.storage != nil {
+		b.storage.Close()
+	}
+}
+
+// Storage returns the storage backend (may be nil).
+func (b *Broker) Storage() storage.Storage {
+	return b.storage
+}
+
+// LoadFromStorage restores messages from storage.
+func (b *Broker) LoadFromStorage() error {
+	if b.storage == nil {
+		return nil
+	}
+	queues, err := b.storage.LoadQueues()
+	if err != nil {
+		return err
+	}
+	for name := range queues {
+		storedMsgs, err := b.storage.LoadMessages(name)
+		if err != nil {
+			return err
+		}
+		q := b.GetOrCreateQueue(name)
+		for _, sm := range storedMsgs {
+			msg := &Message{
+				ID:          sm.ID,
+				Queue:       sm.Queue,
+				Payload:     sm.Payload,
+				Headers:     sm.Headers,
+				Attempt:     sm.Attempt,
+				PublishedAt: sm.PublishedAt,
+				VisibleAt:   sm.VisibleAt,
+			}
+			q.EnqueueDirect(msg)
+		}
+	}
+	return nil
 }
 
 // GetOrCreateQueue returns the queue with the given name, creating it if needed.

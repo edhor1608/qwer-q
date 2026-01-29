@@ -2,10 +2,12 @@ package broker
 
 import (
 	"net"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jonas/qwer-q/internal/protocol"
+	"github.com/jonas/qwer-q/internal/storage"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -249,5 +251,114 @@ func TestBrokerQueues(t *testing.T) {
 	}
 	if names[0] != "alpha" || names[1] != "beta" || names[2] != "gamma" {
 		t.Fatalf("expected sorted names, got %v", names)
+	}
+}
+
+func TestBrokerWithStorage(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-storage-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Create storage and broker
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Save queue config first (required for LoadFromStorage)
+	store.SaveQueue("persist-queue", storage.QueueConfig{})
+
+	b := NewBroker(WithStorage(store))
+
+	// Publish a message
+	req := &protocol.PublishRequest{
+		Queue:   "persist-queue",
+		Payload: []byte("persisted data"),
+	}
+	resp, err := b.HandlePublish(req)
+	if err != nil {
+		t.Fatalf("HandlePublish failed: %v", err)
+	}
+	msgID := resp.MessageId
+
+	// Verify message was saved to storage
+	messages, err := store.LoadMessages("persist-queue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message in storage, got %d", len(messages))
+	}
+	if messages[0].ID != msgID {
+		t.Fatalf("message ID mismatch in storage")
+	}
+
+	// Close broker (also closes storage)
+	b.Close()
+
+	// Reopen storage and create new broker
+	store2, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatalf("failed to reopen storage: %v", err)
+	}
+
+	b2 := NewBroker(WithStorage(store2))
+	defer b2.Close()
+
+	// Load from storage
+	if err := b2.LoadFromStorage(); err != nil {
+		t.Fatalf("LoadFromStorage failed: %v", err)
+	}
+
+	// Verify queue was restored with message
+	q := b2.GetQueue("persist-queue")
+	if q == nil {
+		t.Fatal("queue not restored")
+	}
+	if q.Len() != 1 {
+		t.Fatalf("expected 1 message in queue, got %d", q.Len())
+	}
+}
+
+func TestBrokerAckDeletesFromStorage(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-ack-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	// Publish
+	req := &protocol.PublishRequest{
+		Queue:   "ack-queue",
+		Payload: []byte("to be acked"),
+	}
+	resp, _ := b.HandlePublish(req)
+	msgID := resp.MessageId
+
+	// Start consumer and get message
+	q := b.GetQueue("ack-queue")
+	ch := q.Dequeue(30 * time.Second)
+	<-ch // receive message
+
+	// Ack
+	ackReq := &protocol.AckRequest{MessageId: msgID}
+	if !b.HandleAck(ackReq, "ack-queue") {
+		t.Fatal("ack failed")
+	}
+
+	// Verify message deleted from storage
+	messages, _ := store.LoadMessages("ack-queue")
+	if len(messages) != 0 {
+		t.Fatalf("expected 0 messages in storage after ack, got %d", len(messages))
 	}
 }

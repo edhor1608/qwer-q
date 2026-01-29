@@ -42,6 +42,14 @@ func (q *Queue) Enqueue(msg *Message) {
 	q.tryDeliver()
 }
 
+// EnqueueDirect adds a message without triggering storage save (for recovery).
+func (q *Queue) EnqueueDirect(msg *Message) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.messages = append(q.messages, msg)
+	q.tryDeliver()
+}
+
 // tryDeliver attempts to deliver messages to consumers. Must be called with lock held.
 func (q *Queue) tryDeliver() {
 	if len(q.consumers) == 0 || len(q.messages) == 0 {

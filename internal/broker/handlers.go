@@ -26,6 +26,12 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		VisibleAt:   time.Now(),
 	}
 
+	if b.storage != nil {
+		if err := b.storage.SaveMessage(msg); err != nil {
+			return nil, err
+		}
+	}
+
 	q := b.GetOrCreateQueue(req.GetQueue())
 	q.Enqueue(msg)
 
@@ -49,7 +55,13 @@ func (b *Broker) HandleAck(req *protocol.AckRequest, queueName string) bool {
 	if q == nil {
 		return false
 	}
-	return q.Ack(req.GetMessageId())
+	if !q.Ack(req.GetMessageId()) {
+		return false
+	}
+	if b.storage != nil {
+		b.storage.DeleteMessage(req.GetMessageId())
+	}
+	return true
 }
 
 // HandleNack processes a nack request.
