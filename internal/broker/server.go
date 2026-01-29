@@ -78,6 +78,7 @@ func (s *Server) Close() error {
 // connState tracks per-connection state.
 type connState struct {
 	queueName  string
+	clientAddr string
 	msgCh      <-chan *Message
 	stopCh     chan struct{}
 	deliverWg  sync.WaitGroup
@@ -88,10 +89,15 @@ func (s *Server) handleConn(conn net.Conn) {
 	defer s.wg.Done()
 	defer conn.Close()
 
+	clientAddr := conn.RemoteAddr().String()
+	LogConnect(clientAddr)
+
 	state := &connState{
-		stopCh: make(chan struct{}),
+		clientAddr: clientAddr,
+		stopCh:     make(chan struct{}),
 	}
 	defer func() {
+		LogDisconnect(clientAddr)
 		close(state.stopCh)
 		state.deliverWg.Wait()
 		if state.msgCh != nil {
@@ -123,7 +129,7 @@ func (s *Server) handleConn(conn net.Conn) {
 func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.Conn) []byte {
 	switch frame.OpCode {
 	case protocol.OpPublish:
-		return s.handlePublish(frame.Payload)
+		return s.handlePublish(frame.Payload, state.clientAddr)
 	case protocol.OpConsume:
 		return s.handleConsume(frame.Payload, state, conn)
 	case protocol.OpAck:
@@ -143,7 +149,7 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 	}
 }
 
-func (s *Server) handlePublish(payload []byte) []byte {
+func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 	start := time.Now()
 	var req protocol.PublishRequest
 	if err := proto.Unmarshal(payload, &req); err != nil {
@@ -158,9 +164,11 @@ func (s *Server) handlePublish(payload []byte) []byte {
 
 	resp, err := s.broker.HandlePublish(&req)
 	if err != nil {
+		LogError("publish failed", err, "queue", req.GetQueue(), "client", clientAddr)
 		return EncodeError(3, err.Error())
 	}
 
+	LogPublish(req.GetQueue(), resp.MessageId, clientAddr)
 	q := s.broker.GetQueue(req.GetQueue())
 	RecordPublish(req.GetQueue(), time.Since(start).Seconds())
 	if q != nil {
@@ -191,6 +199,7 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 				if !ok {
 					return
 				}
+				LogConsume(state.queueName, msg.ID, state.clientAddr)
 				RecordConsume(state.queueName)
 				q := s.broker.GetQueue(state.queueName)
 				if q != nil {
@@ -224,6 +233,7 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 		return EncodeError(4, "message not found")
 	}
 
+	LogAck(state.queueName, req.GetMessageId(), state.clientAddr)
 	RecordAck(state.queueName)
 	q := s.broker.GetQueue(state.queueName)
 	if q != nil {
@@ -243,6 +253,7 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 		return EncodeError(4, "message not found")
 	}
 
+	LogNack(state.queueName, req.GetMessageId(), state.clientAddr, req.GetRequeue())
 	RecordNack(state.queueName)
 	q := s.broker.GetQueue(state.queueName)
 	if q != nil {
