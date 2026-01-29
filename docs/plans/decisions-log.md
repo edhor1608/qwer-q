@@ -470,3 +470,108 @@ Configurable max queue size. Reject publishes when full.
 - Publish to full queue returns error
 - Producer responsible for backoff/retry
 - Monitoring alert: "queue near capacity"
+
+---
+
+## DEC-018: Message ID — Broker Default, Client Override
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Who generates unique message identifier:
+1. Broker-generated — guaranteed unique
+2. Client-generated — client controls
+3. Both — client optional, broker fills in
+
+### Decision
+Broker generates by default (ULID), client can override.
+
+### Rationale
+- ULID preferred (sortable, contains timestamp)
+- Client-provided enables idempotency patterns
+- Guaranteed uniqueness when client doesn't care
+
+### Consequences
+- Broker generates ULID if no ID provided
+- Client can set `message_id` field on publish
+- ID used for dedup if idempotency enabled
+
+---
+
+## DEC-019: Free-Form Message Headers
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Should messages support arbitrary metadata:
+1. Free-form headers — map of string→string
+2. No headers — embed in payload
+3. Typed headers only — predefined set
+
+### Decision
+Free-form string→string headers.
+
+### Rationale
+- Essential for distributed tracing (trace_id, span_id)
+- Gateway can pass context without touching payload
+- HTTP/gRPC have them, users expect them
+- Opaque to broker — just passes through
+
+### Consequences
+- Message format includes headers map
+- Broker preserves headers, doesn't interpret
+- Reserved prefix (e.g., `_qwer_`) for broker-set headers
+
+---
+
+## DEC-020: Opt-In Idempotency via Dedup Key
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+Handling duplicate publishes:
+1. Client-provided dedup key — opt-in
+2. Automatic dedup on message ID — always on
+3. Consumer's problem — no broker dedup
+
+### Decision
+Client-provided dedup key, opt-in.
+
+### Rationale
+- No overhead for fire-and-forget use cases
+- Client controls dedup semantics (order ID, request ID)
+- Message ID can serve as dedup key
+- Configurable TTL window
+
+### Consequences
+- Optional `idempotency_key` field on publish
+- Broker tracks keys for configurable TTL (default 5 min)
+- Duplicate key within window → rejected with specific error
+- No dedup overhead when not used
+
+---
+
+## DEC-021: Layered Client Libraries
+**Date:** 2025-01-29
+**Status:** Decided
+
+### Context
+How sophisticated should client libs be:
+1. Thin — minimal wrapper, user handles everything
+2. Smart — auto-reconnect, pooling, validation, retries
+3. Layered — thin core + optional batteries
+
+### Decision
+Layered: thin core + optional smart layer.
+
+### Rationale
+- Thin core gives gateway project clean foundation
+- Power users get low-level control
+- Smart layer provides DX for direct users
+- Gateway will build its own smart layer anyway
+
+### Consequences
+- Core package: connection, protocol, basic pub/sub
+- Batteries package: reconnect, pooling, typed wrappers, retry
+- Gateway project builds on core, may use or replace batteries
+- Documentation covers both levels

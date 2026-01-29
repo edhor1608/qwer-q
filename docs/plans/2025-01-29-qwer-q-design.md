@@ -213,6 +213,34 @@ tRPC-inspired "actions over MQ".
 | **On full** | Reject publish with clear error |
 | **Default** | Generous limit (e.g., 1M messages or 1GB) |
 
+### 18. Message ID: Broker Default, Client Override
+| Aspect | Decision |
+|--------|----------|
+| **Default** | Broker generates ULID |
+| **Override** | Client can provide own ID |
+| **Format** | ULID (sortable, timestamp-based) |
+
+### 19. Message Headers: Free-Form
+| Aspect | Decision |
+|--------|----------|
+| **Format** | String→string map |
+| **Broker behavior** | Pass-through, opaque |
+| **Use cases** | Tracing, routing hints, context |
+
+### 20. Idempotency: Opt-In Dedup Key
+| Aspect | Decision |
+|--------|----------|
+| **Mechanism** | Client-provided `idempotency_key` |
+| **Window** | Configurable TTL (default 5 min) |
+| **No key** | No dedup overhead |
+
+### 21. Client Libraries: Layered
+| Aspect | Decision |
+|--------|----------|
+| **Core** | Thin wrapper — connection, protocol, basic pub/sub |
+| **Batteries** | Optional — reconnect, pooling, typed wrappers, retry |
+| **Why** | Gateway builds on core; power users get control |
+
 ---
 
 ## Decisions Pending
