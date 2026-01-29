@@ -110,22 +110,54 @@ tRPC-inspired "actions over MQ".
 - Excellent Docker story (static binaries)
 - Rust can be introduced later for hot paths if needed
 
+### 5. Delivery Semantics: Visibility Timeout
+| Aspect | Decision |
+|--------|----------|
+| **Redelivery model** | Visibility timeout (SQS-style) |
+| **Behavior** | Message invisible for N seconds after delivery, requeued if no ack |
+| **Guarantees** | At-least-once |
+
+**Rationale:**
+- Simple to understand and implement
+- Works even with dumb clients
+- Consumer crash = automatic retry after timeout
+
+### 6. Wire Protocol: Custom Binary over TCP
+| Aspect | Decision |
+|--------|----------|
+| **Protocol** | Custom binary framed protocol |
+| **Transport** | TCP (+TLS for prod) |
+| **Why not gRPC** | Maximum control, optimize every byte |
+
+**Rationale:**
+- Full control over wire format
+- Optimize for specific use cases
+- Aligns with "build a real alternative" mindset
+
+### 7. Schema Format: Protobuf
+| Aspect | Decision |
+|--------|----------|
+| **Format** | Protocol Buffers |
+| **Storage** | Compiled descriptors in schema registry |
+| **Codegen** | Standard protoc/buf tooling |
+
+**Rationale:**
+- Battle-tested compatibility rules
+- Binary efficiency
+- Don't build a schema language when building a protocol
+
 ---
 
 ## Decisions Pending
 
-### Delivery Semantics
-- [ ] At-least-once vs exactly-once
-- [ ] Ack model: per message vs per batch
-- [ ] Retry/redelivery rules, timeouts, backoff
-
-### Protocol/Transport
-- [ ] Custom binary protocol vs gRPC vs simpler
+### Protocol Details
+- [ ] Frame format (length prefix, headers, payload)
+- [ ] Command set (PUBLISH, CONSUME, ACK, etc.)
+- [ ] Protocol versioning scheme
 - [ ] TLS strategy
 
-### Schema Registry (core of "typed MQ")
-- [ ] Schema format (Protobuf, JSON Schema, custom)
-- [ ] Registration UX
+### Schema Registry UX
+- [ ] Registration UX (CLI, API, file-based)
 - [ ] Compatibility rules (backward/forward/full)
 - [ ] Where validation happens (producer, broker, consumer)
 
@@ -168,7 +200,9 @@ tRPC-inspired "actions over MQ".
 
 ## Open Questions to Explore
 
-1. What schema format best balances DX and performance?
+1. ~~What schema format best balances DX and performance?~~ → Protobuf
 2. How should the CLI/admin interface work?
-3. What's the wire protocol?
+3. ~~What's the wire protocol?~~ → Custom binary over TCP
 4. How do clients discover schema types?
+5. What's the frame format for the custom protocol?
+6. How does schema registration work (CLI, API, file-watch)?
