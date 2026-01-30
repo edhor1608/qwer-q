@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  qwer-q:
+    build: .
+    ports:
+      - "9876:9876"
+      - "9877:9877"
+    volumes:
+      - qwer-q-data:/var/lib/qwer-q
+    environment:
+      - QWERQ_DATA_DIR=/var/lib/qwer-q
+volumes:
+  qwer-q-data:
