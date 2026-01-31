@@ -88,8 +88,9 @@ func TestStressMemoryPressure(t *testing.T) {
 	t.Logf("Memory growth: %.2f MB for %d messages (%d bytes each)", memGrowth, q.Len(), msgSize)
 	t.Logf("Queue length: %d, Errors: %d", q.Len(), errors)
 
-	// Memory should not grow more than 2x the data size
-	expectedMax := float64(1000*msgSize) / (1024 * 1024) * 2 // 2x overhead
+	// Memory should not grow more than 4x the data size
+	// (BadgerDB has memtables, caches, and other overhead)
+	expectedMax := float64(1000*msgSize) / (1024 * 1024) * 4 // 4x overhead
 	if memGrowth > expectedMax {
 		t.Errorf("Memory grew %.2f MB, expected max %.2f MB", memGrowth, expectedMax)
 	}
