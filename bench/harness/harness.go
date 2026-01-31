@@ -120,3 +120,153 @@ func formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%.2fms", float64(d.Microseconds())/1000)
 }
+
+// Result holds comprehensive benchmark results
+type Result struct {
+	Queue     string
+	Published int64
+	Consumed  int64
+	Duration  time.Duration
+	PubErrors int64
+	ConErrors int64
+	Samples   []Sample
+}
+
+// Sample holds a point-in-time measurement
+type Sample struct {
+	Timestamp time.Time
+	Published int64
+	Consumed  int64
+	MemAlloc  uint64
+}
+
+// SizeResult holds results for message size tests
+type SizeResult struct {
+	Size       int
+	MsgsPerSec float64
+	MBPerSec   float64
+}
+
+// DepthResult holds results for queue depth tests
+type DepthResult struct {
+	Prefilled   int
+	Consumed    int64
+	FillTime    time.Duration
+	ConsumeTime time.Duration
+	FillRate    float64
+	ConsumeRate float64
+}
+
+// BurstResult holds results for burst tests
+type BurstResult struct {
+	BurstSize      int
+	BurstInterval  time.Duration
+	TotalBursts    int
+	TotalPublished int64
+	TotalConsumed  int64
+	AvgBurstTime   time.Duration
+}
+
+// LagResult holds results for consumer lag tests
+type LagResult struct {
+	ProducerRate  int
+	ConsumerDelay time.Duration
+	Published     int64
+	Consumed      int64
+	MaxLag        int64
+	FinalLag      int64
+}
+
+// PrintSustainedResults prints sustained load test results
+func PrintSustainedResults(results []*Result) {
+	fmt.Println("\n+-------------+------------+------------+------------+-----------+")
+	fmt.Println("| Queue       | Published  | Consumed   | Pub/sec    | Errors    |")
+	fmt.Println("+-------------+------------+------------+------------+-----------+")
+	for _, r := range results {
+		rate := float64(r.Published) / r.Duration.Seconds()
+		fmt.Printf("| %-11s | %10s | %10s | %10s | %9d |\n",
+			r.Queue, formatNumber(r.Published), formatNumber(r.Consumed), formatNumber(int64(rate)), r.PubErrors)
+	}
+	fmt.Println("+-------------+------------+------------+------------+-----------+")
+}
+
+// PrintSizeResults prints message size test results
+func PrintSizeResults(queue string, results []SizeResult) {
+	fmt.Printf("\nMessage Size Impact (%s):\n", queue)
+	fmt.Println("+----------+------------+------------+")
+	fmt.Println("| Size     | Msgs/sec   | MB/sec     |")
+	fmt.Println("+----------+------------+------------+")
+	for _, r := range results {
+		fmt.Printf("| %8s | %10s | %10.1f |\n", formatBytes(r.Size), formatNumber(int64(r.MsgsPerSec)), r.MBPerSec)
+	}
+	fmt.Println("+----------+------------+------------+")
+}
+
+// PrintDepthResults prints queue depth test results
+func PrintDepthResults(results map[string]*DepthResult) {
+	fmt.Println("\nQueue Depth Test:")
+	fmt.Println("+-------------+------------+------------+------------+------------+")
+	fmt.Println("| Queue       | Prefilled  | Fill/sec   | Consumed   | Drain/sec  |")
+	fmt.Println("+-------------+------------+------------+------------+------------+")
+	for name, r := range results {
+		fmt.Printf("| %-11s | %10s | %10s | %10s | %10s |\n",
+			name, formatNumber(int64(r.Prefilled)), formatNumber(int64(r.FillRate)),
+			formatNumber(r.Consumed), formatNumber(int64(r.ConsumeRate)))
+	}
+	fmt.Println("+-------------+------------+------------+------------+------------+")
+}
+
+// PrintBurstResults prints burst test results
+func PrintBurstResults(results map[string]*BurstResult) {
+	fmt.Println("\nBurst Test:")
+	fmt.Println("+-------------+--------+------------+------------+-----------+")
+	fmt.Println("| Queue       | Bursts | Published  | Consumed   | Avg Burst |")
+	fmt.Println("+-------------+--------+------------+------------+-----------+")
+	for name, r := range results {
+		fmt.Printf("| %-11s | %6d | %10s | %10s | %9s |\n",
+			name, r.TotalBursts, formatNumber(r.TotalPublished),
+			formatNumber(r.TotalConsumed), formatDuration(r.AvgBurstTime))
+	}
+	fmt.Println("+-------------+--------+------------+------------+-----------+")
+}
+
+// PrintLagResults prints consumer lag test results
+func PrintLagResults(results map[string]*LagResult) {
+	fmt.Println("\nConsumer Lag Test:")
+	fmt.Println("+-------------+------------+------------+------------+------------+")
+	fmt.Println("| Queue       | Published  | Consumed   | Max Lag    | Final Lag  |")
+	fmt.Println("+-------------+------------+------------+------------+------------+")
+	for name, r := range results {
+		fmt.Printf("| %-11s | %10s | %10s | %10s | %10s |\n",
+			name, formatNumber(r.Published), formatNumber(r.Consumed),
+			formatNumber(r.MaxLag), formatNumber(r.FinalLag))
+	}
+	fmt.Println("+-------------+------------+------------+------------+------------+")
+}
+
+// PrintMemoryOverTime prints memory usage over time
+func PrintMemoryOverTime(results []*Result) {
+	fmt.Println("\nMemory Usage Over Time:")
+	for _, r := range results {
+		if len(r.Samples) == 0 {
+			continue
+		}
+		fmt.Printf("\n%s:\n", r.Queue)
+		fmt.Println("  Time    | Published  | Consumed   | Memory    ")
+		fmt.Println("  --------|------------|------------|----------")
+		for i, s := range r.Samples {
+			fmt.Printf("  %4ds   | %10s | %10s | %9s\n",
+				i+1, formatNumber(s.Published), formatNumber(s.Consumed), formatBytes(int(s.MemAlloc)))
+		}
+	}
+}
+
+func formatBytes(b int) string {
+	if b >= 1024*1024 {
+		return fmt.Sprintf("%.1fMB", float64(b)/(1024*1024))
+	}
+	if b >= 1024 {
+		return fmt.Sprintf("%.1fKB", float64(b)/1024)
+	}
+	return fmt.Sprintf("%dB", b)
+}

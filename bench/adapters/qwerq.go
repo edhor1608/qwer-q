@@ -51,6 +51,12 @@ func (a *QWERQAdapter) Publish(ctx context.Context, queue string, payload []byte
 }
 
 func (a *QWERQAdapter) Consume(ctx context.Context, queue string, handler func([]byte) error) error {
+	// Close connection when context is cancelled to break out of blocking read
+	go func() {
+		<-ctx.Done()
+		a.consClient.Close()
+	}()
+
 	return a.consClient.Consume(queue, 100, func(msg *protocol.Message) error {
 		if err := handler(msg.Payload); err != nil {
 			return err

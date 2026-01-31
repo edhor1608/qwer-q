@@ -181,6 +181,7 @@ func (q *Queue) Ack(messageID string) bool {
 	defer q.mu.Unlock()
 	if _, ok := q.inFlight[messageID]; ok {
 		delete(q.inFlight, messageID)
+		q.tryDeliver() // Deliver next message now that channel has space
 		return true
 	}
 	return false

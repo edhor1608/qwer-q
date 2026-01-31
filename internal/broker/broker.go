@@ -121,6 +121,12 @@ func (b *Broker) GetOrCreateQueue(name string) *Queue {
 	}
 	q = NewQueue(name)
 	b.queues[name] = q
+
+	// Persist queue config for recovery
+	if b.storage != nil {
+		b.storage.SaveQueue(name, storage.QueueConfig{})
+	}
+
 	return q
 }
 
