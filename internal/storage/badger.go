@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 )
@@ -12,19 +13,71 @@ const (
 	queuePrefix = "queue:"
 )
 
+// DefaultSyncInterval is the default interval between fsync calls.
+// 100ms balances speed (~5K/s) with durability (lose at most 100ms on power failure).
+const DefaultSyncInterval = 100 * time.Millisecond
+
 // BadgerStorage implements Storage using BadgerDB.
 type BadgerStorage struct {
-	db *badger.DB
+	db           *badger.DB
+	done         chan struct{}
+	syncInterval time.Duration
+}
+
+// StorageOption configures BadgerStorage.
+type StorageOption func(*badgerConfig)
+
+type badgerConfig struct {
+	syncInterval time.Duration
+}
+
+// WithSyncInterval sets how often to fsync. 0 = sync every write (slow but safest).
+func WithSyncInterval(d time.Duration) StorageOption {
+	return func(c *badgerConfig) { c.syncInterval = d }
 }
 
 // NewBadgerStorage opens or creates a BadgerDB at the given path.
-func NewBadgerStorage(path string) (*BadgerStorage, error) {
-	opts := badger.DefaultOptions(path).WithLogger(nil)
+func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, error) {
+	cfg := &badgerConfig{syncInterval: DefaultSyncInterval}
+	for _, opt := range options {
+		opt(cfg)
+	}
+
+	// SyncWrites=true only if syncInterval is 0 (sync every write)
+	syncEveryWrite := cfg.syncInterval == 0
+
+	opts := badger.DefaultOptions(path).
+		WithLogger(nil).
+		WithNumMemtables(2).
+		WithMemTableSize(32 << 20).
+		WithValueLogFileSize(64 << 20).
+		WithNumLevelZeroTables(2).
+		WithNumLevelZeroTablesStall(4).
+		WithBlockCacheSize(32 << 20).
+		WithIndexCacheSize(16 << 20).
+		WithCompression(0).
+		WithSyncWrites(syncEveryWrite).
+		WithValueThreshold(1 << 10).
+		WithNumCompactors(2).
+		WithNumVersionsToKeep(1)
+
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, err
 	}
-	return &BadgerStorage{db: db}, nil
+
+	s := &BadgerStorage{
+		db:           db,
+		done:         make(chan struct{}),
+		syncInterval: cfg.syncInterval,
+	}
+
+	// Start background sync if not syncing every write
+	if !syncEveryWrite {
+		go s.syncLoop()
+	}
+
+	return s, nil
 }
 
 // msgKey returns the storage key for a message.
@@ -138,7 +191,23 @@ func (s *BadgerStorage) LoadQueues() (map[string]QueueConfig, error) {
 	return queues, err
 }
 
-// Close closes the database.
+// syncLoop periodically fsyncs data to disk.
+func (s *BadgerStorage) syncLoop() {
+	ticker := time.NewTicker(s.syncInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.db.Sync()
+		case <-s.done:
+			return
+		}
+	}
+}
+
+// Close syncs data and closes the database.
 func (s *BadgerStorage) Close() error {
+	close(s.done)
+	s.db.Sync() // Final sync before close
 	return s.db.Close()
 }
