@@ -45,7 +45,8 @@ func (a *RabbitMQAdapter) Teardown() error {
 }
 
 func (a *RabbitMQAdapter) Publish(ctx context.Context, queue string, payload []byte) error {
-	_, err := a.ch.QueueDeclare(queue, false, true, false, false, nil)
+	// Declare queue: durable=false, autoDelete=false (persist for benchmark duration)
+	_, err := a.ch.QueueDeclare(queue, false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
@@ -55,22 +56,29 @@ func (a *RabbitMQAdapter) Publish(ctx context.Context, queue string, payload []b
 }
 
 func (a *RabbitMQAdapter) Consume(ctx context.Context, queue string, handler func([]byte) error) error {
-	_, err := a.ch.QueueDeclare(queue, false, true, false, false, nil)
+	// Same queue declaration as publish
+	_, err := a.ch.QueueDeclare(queue, false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
-	msgs, err := a.ch.Consume(queue, "", true, false, false, false, nil)
+	// autoAck=false for at-least-once, then manually ack
+	msgs, err := a.ch.Consume(queue, "", false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case msg := <-msgs:
+			return nil
+		case msg, ok := <-msgs:
+			if !ok {
+				return nil
+			}
 			if err := handler(msg.Body); err != nil {
+				msg.Nack(false, true) // Requeue on error
 				return err
 			}
+			msg.Ack(false)
 		}
 	}
 }

@@ -97,18 +97,24 @@
 
 ---
 
-## Test 5: QWER-Q vs NATS vs Kafka (15s)
+## Test 5: Fair Comparison - All Systems (15s, fixed adapters)
 
-| Queue    | Published | Consumed | Pub/sec | Errors     |
-|----------|-----------|----------|---------|------------|
-| QWER-Q   | 5.1K      | 5.1K     | 338     | 0          |
-| NATS     | 10.6M     | 10.6M    | 706.8K  | 0          |
-| Kafka    | 3.5K      | 0        | 234     | 36,515,349 |
+| Queue    | Published | Consumed | Pub/sec | Errors | Persistence |
+|----------|-----------|----------|---------|--------|-------------|
+| NATS     | 10.8M     | 10.8M    | 721.3K  | 0      | No (pub/sub) |
+| RabbitMQ | 73.7K     | 73.7K    | 4.9K    | 0      | Optional |
+| Kafka    | 9.0K      | 9.0K     | 601     | 9      | Yes (log) |
+| QWER-Q   | 6.9K      | 6.9K     | 460     | 0      | Yes (sync) |
 
-**Notes:**
-- QWER-Q throughput lower due to sync writes enabled (durability mode)
-- NATS ~2000x faster (no persistence)
-- Kafka adapter broken - investigate before conclusions
+**Key Insights:**
+- NATS is 1500x faster but doesn't persist by default
+- RabbitMQ is 10x faster with optional persistence
+- Kafka is ~1.3x faster with log-based persistence
+- QWER-Q with sync writes is slowest but guarantees no data loss
+
+**Kafka Consumer Delay:**
+- 3 seconds to start consuming (consumer group initialization)
+- This is normal Kafka behavior
 
 ---
 

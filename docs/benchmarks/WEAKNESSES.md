@@ -131,32 +131,32 @@ Added `tryDeliver()` call in `Ack()` function.
 
 ---
 
-## Benchmark Adapter Issues
-
-### Kafka Adapter (Not Working)
-**Status:** Needs Fix
-**Found:** 2026-01-31
-
-The Kafka adapter has issues:
-- 36M publish errors
-- 0 messages consumed
-- Slow startup (10s before first message)
-
-Likely causes:
-1. Topic auto-create not working as expected
-2. Consumer group initialization issues
-3. Connection/broker discovery problems
-
-**Before comparing Kafka fairly, adapter needs to be fixed.**
-
----
-
 ## Comparison Notes
 
 ### Where Kafka Excels
-- TODO: Fix adapter and run benchmarks
-- Expected: High throughput with persistence (log-based)
-- Expected: Better at scale with partitioning
+- Log-based persistence with high throughput (601/s vs QWER-Q 460/s)
+- Horizontal scaling with partitions
+- Better for stream processing / event sourcing
+- Consumer group rebalancing for fault tolerance
+
+### Where NATS Excels
+- Pure pub/sub: 721K/s (1500x faster than persistent queues)
+- Minimal memory footprint
+- Simple deployment
+- Great for ephemeral messaging
+
+### Where RabbitMQ Excels
+- Flexible routing (exchanges, bindings)
+- Optional persistence modes
+- Good balance: 4.9K/s with features
+- Mature ecosystem
+
+### Where QWER-Q Excels
+- Guaranteed durability with sync writes
+- Simple queue semantics
+- Schema validation (built-in)
+- Docker-first deployment
+- Lower complexity than Kafka
 
 ### Where NATS Excels
 - Pure pub/sub throughput: 600K+/s

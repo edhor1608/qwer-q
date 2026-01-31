@@ -2,6 +2,8 @@ package adapters
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -12,6 +14,7 @@ type KafkaAdapter struct {
 	brokers []string
 	writer  *kafka.Writer
 	reader  *kafka.Reader
+	topic   string
 }
 
 // NewKafkaAdapter creates a new Kafka adapter.
@@ -25,11 +28,19 @@ func NewKafkaAdapter(brokers ...string) *KafkaAdapter {
 func (a *KafkaAdapter) Name() string { return "Kafka" }
 
 func (a *KafkaAdapter) Setup(ctx context.Context) error {
+	// Verify connection to Kafka
+	conn, err := kafka.Dial("tcp", a.brokers[0])
+	if err != nil {
+		return fmt.Errorf("failed to connect to kafka: %w", err)
+	}
+	conn.Close()
+
 	a.writer = &kafka.Writer{
-		Addr:         kafka.TCP(a.brokers...),
-		Balancer:     &kafka.LeastBytes{},
-		BatchTimeout: 1 * time.Millisecond, // Low latency
-		RequiredAcks: kafka.RequireOne,     // At-least-once
+		Addr:                   kafka.TCP(a.brokers...),
+		Balancer:               &kafka.LeastBytes{},
+		BatchTimeout:           1 * time.Millisecond,
+		RequiredAcks:           kafka.RequireOne,
+		AllowAutoTopicCreation: true, // Auto-create topics
 	}
 	return nil
 }
@@ -45,6 +56,7 @@ func (a *KafkaAdapter) Teardown() error {
 }
 
 func (a *KafkaAdapter) Publish(ctx context.Context, queue string, payload []byte) error {
+	a.topic = queue
 	return a.writer.WriteMessages(ctx, kafka.Message{
 		Topic: queue,
 		Value: payload,
@@ -52,12 +64,19 @@ func (a *KafkaAdapter) Publish(ctx context.Context, queue string, payload []byte
 }
 
 func (a *KafkaAdapter) Consume(ctx context.Context, queue string, handler func([]byte) error) error {
+	// Ensure topic exists by creating it if needed
+	if err := a.ensureTopic(queue); err != nil {
+		return err
+	}
+
 	a.reader = kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  a.brokers,
-		Topic:    queue,
-		GroupID:  "bench-consumer",
-		MinBytes: 1,
-		MaxBytes: 10e6,
+		Brokers:        a.brokers,
+		Topic:          queue,
+		GroupID:        fmt.Sprintf("bench-%d", time.Now().UnixNano()), // Unique group per run
+		MinBytes:       1,
+		MaxBytes:       10e6,
+		StartOffset:    kafka.FirstOffset, // Start from beginning
+		CommitInterval: 100 * time.Millisecond,
 	})
 
 	for {
@@ -75,10 +94,37 @@ func (a *KafkaAdapter) Consume(ctx context.Context, queue string, handler func([
 			if err := handler(msg.Value); err != nil {
 				return err
 			}
-			// Commit offset (at-least-once)
 			if err := a.reader.CommitMessages(ctx, msg); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
 				return err
 			}
 		}
 	}
+}
+
+func (a *KafkaAdapter) ensureTopic(topic string) error {
+	conn, err := kafka.Dial("tcp", a.brokers[0])
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	controller, err := conn.Controller()
+	if err != nil {
+		return err
+	}
+
+	controllerConn, err := kafka.Dial("tcp", net.JoinHostPort(controller.Host, fmt.Sprintf("%d", controller.Port)))
+	if err != nil {
+		return err
+	}
+	defer controllerConn.Close()
+
+	return controllerConn.CreateTopics(kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	})
 }
