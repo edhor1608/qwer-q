@@ -6,8 +6,11 @@ services:
       - "9876:9876"
       - "9877:9877"
     volumes:
-      - qwer-q-data:/var/lib/qwer-q
-    environment:
-      - QWERQ_DATA_DIR=/var/lib/qwer-q
+      - qwer-q-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1"
 volumes:
   qwer-q-data:
