@@ -59,6 +59,129 @@ Connection state tracks only one queueName and msgCh. Multiple CONSUME commands 
 
 ---
 
+### W-003: Connection Storm - 100% Failure Rate
+**Status:** Open
+**Severity:** Critical
+**Found:** 2026-01-31
+
+**Description:**
+QWER-Q fails 100% of rapid concurrent connection attempts, while NATS and Kafka handle them fine.
+
+**Reproduction:**
+```bash
+go run bench/cmd/weakness/main.go --queues=qwerq,nats,kafka --tests=connections --skip-docker
+```
+
+**Results:**
+| Queue | Attempted | Successful | Failed |
+|-------|-----------|------------|--------|
+| QWER-Q | 100 | 0 | 100 |
+| NATS | 100 | 100 | 0 |
+| Kafka | 100 | 100 | 0 |
+
+**Possible Causes:**
+- TCP accept backlog too small
+- Connection handling blocking
+- Resource exhaustion under concurrent load
+
+---
+
+### W-004: Memory Pressure Crash at 13K Messages
+**Status:** Open
+**Severity:** High
+**Found:** 2026-01-31
+
+**Description:**
+With 10KB messages (no consumers), QWER-Q crashes/errors at ~13K messages instead of expected ~50K.
+
+**Reproduction:**
+```bash
+go run bench/cmd/weakness/main.go --queues=qwerq --tests=memory --skip-docker
+```
+
+**Results:**
+- Expected: ~50,000 messages (488MB / 10KB)
+- Actual: 13,036 published, 101 errors, then stopped
+- Container became unresponsive (crash recovery test got "connection refused")
+
+**Possible Causes:**
+- BadgerDB memory spikes during writes
+- Go runtime memory allocation issues
+- Container OOM killed
+
+---
+
+### W-005: Throughput Degrades 80x with Large Messages
+**Status:** Open
+**Severity:** High
+**Found:** 2026-01-31
+
+**Description:**
+Message throughput degrades dramatically with larger message sizes, much worse than competitors.
+
+**Reproduction:**
+```bash
+go run bench/cmd/stress/main.go --queues=qwerq,kafka --tests=sizes
+```
+
+**Results:**
+| Size | QWER-Q | Kafka | QWER-Q vs Kafka |
+|------|--------|-------|-----------------|
+| 64B | 321/s | 597/s | 1.8x slower |
+| 256KB | 4/s | 310/s | 77x slower |
+
+**Root Cause:**
+Sync write per message. No batching. Each large message triggers full disk sync.
+
+---
+
+### W-006: Burst Handling Catastrophically Slow
+**Status:** Open
+**Severity:** Critical
+**Found:** 2026-01-31
+
+**Description:**
+Burst of 1000 messages takes 27 seconds to process vs 0.6ms for NATS.
+
+**Reproduction:**
+```bash
+go run bench/cmd/stress/main.go --queues=qwerq,nats --tests=burst
+```
+
+**Results:**
+| Queue | Bursts in 30s | Avg Burst Time |
+|-------|---------------|----------------|
+| NATS | 300 | 0.61ms |
+| Kafka | 17 | 1.76s |
+| QWER-Q | 2 | 27.45s |
+
+Also: 826 published but only 625 consumed (message loss/stuck)
+
+---
+
+### W-007: Container Crashes Under Stress
+**Status:** Open
+**Severity:** Critical
+**Found:** 2026-01-31
+
+**Description:**
+QWER-Q container crashes repeatedly during stress tests, becoming unresponsive.
+
+**Reproduction:**
+Run burst test, then any subsequent test fails with "connection refused"
+
+**Observed crashes:**
+1. After memory pressure test (13K x 10KB messages)
+2. After burst test (1000 msg bursts)
+3. After queue depth test
+
+**Possible Causes:**
+- OOM killer
+- Panic in Go code
+- BadgerDB corruption
+
+---
+
 ## Fixed Weaknesses
 
 ### W-F001: BadgerDB Memory Configuration

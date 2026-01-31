@@ -127,3 +127,67 @@
 | Crash recovery | 0.6% (61/10000) | 100% (10000/10000) |
 | Message delivery after ACK | Stuck | Continuous |
 | Storage on startup | Disabled | Enabled with --data-dir |
+
+---
+
+## Test 6: Weakness Discovery Tests
+
+### Connection Storm (100 concurrent connections)
+| Queue  | Attempted | Successful | Failed |
+|--------|-----------|------------|--------|
+| QWER-Q | 100       | 0          | 100    |
+| NATS   | 100       | 100        | 0      |
+| Kafka  | 100       | 100        | 0      |
+
+**Weakness W-003:** QWER-Q fails 100% of rapid concurrent connections.
+
+### Memory Pressure (50K x 10KB messages, no consumers)
+| Queue  | Target | Published | Errors | Result |
+|--------|--------|-----------|--------|--------|
+| QWER-Q | 50,000 | 13,036    | 101    | Crashed |
+| NATS   | 50,000 | 50,000    | 0      | OK |
+| Kafka  | 50,000 | 50,000    | 0      | OK |
+
+**Weakness W-004:** QWER-Q crashes at ~13K messages under memory pressure.
+
+### Message Size Scaling
+| Size   | QWER-Q | Kafka | Ratio |
+|--------|--------|-------|-------|
+| 64B    | 321/s  | 597/s | 1.8x slower |
+| 256KB  | 4/s    | 310/s | 77x slower |
+
+**Weakness W-005:** Large messages cause 80x throughput degradation.
+
+### Burst Traffic (1000 msg bursts)
+| Queue  | Bursts in 30s | Avg Burst Time |
+|--------|---------------|----------------|
+| NATS   | 300           | 0.61ms         |
+| Kafka  | 17            | 1.76s          |
+| QWER-Q | 2             | 27.45s         |
+
+**Weakness W-006:** Burst handling 45,000x slower than NATS.
+
+### Container Stability
+| Queue  | Crashes During Tests |
+|--------|---------------------|
+| QWER-Q | 3 (memory, burst, depth tests) |
+| NATS   | 0 |
+| Kafka  | 0 |
+
+**Weakness W-007:** Container crashes under stress.
+
+---
+
+## Summary of Open Weaknesses
+
+| ID | Severity | Issue |
+|----|----------|-------|
+| W-001 | Medium | Sync writes 37x slower than async |
+| W-002 | High | Single consumer per connection |
+| W-003 | Critical | 100% connection storm failure |
+| W-004 | High | Crash at 13K messages under pressure |
+| W-005 | High | 80x degradation with large messages |
+| W-006 | Critical | Burst handling 45,000x slower |
+| W-007 | Critical | Container crashes under stress |
+
+See `WEAKNESSES.md` for reproduction steps and analysis.
