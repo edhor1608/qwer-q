@@ -1,20 +1,32 @@
 package broker
 
 import (
+	"errors"
+	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jonas/qwer-q/internal/storage"
 )
 
+// ErrMemoryPressure is returned when memory usage exceeds the limit.
+var ErrMemoryPressure = errors.New("memory pressure: server under load, try again later")
+
+// DefaultMemoryLimit is the default memory limit (300MB - leaves headroom in 512MB container).
+// BadgerDB uses mmap which doesn't show in Go's MemStats but counts toward container memory.
+const DefaultMemoryLimit = 300 * 1024 * 1024
+
 // Broker manages queues and message routing.
 type Broker struct {
-	mu        sync.RWMutex
-	queues    map[string]*Queue
-	done      chan struct{}
-	storage   storage.Storage
-	dedup     *IdempotencyTracker
+	mu          sync.RWMutex
+	queues      map[string]*Queue
+	done        chan struct{}
+	storage     storage.Storage
+	dedup       *IdempotencyTracker
+	memoryLimit uint64        // Maximum memory in bytes (0 = unlimited)
+	memCheck    atomic.Uint64 // Counter to throttle memory checks
 }
 
 // BrokerOption configures a Broker.
@@ -25,18 +37,47 @@ func WithStorage(s storage.Storage) BrokerOption {
 	return func(b *Broker) { b.storage = s }
 }
 
+// WithMemoryLimit sets the maximum memory usage in bytes.
+// When exceeded, publishes will be rejected with ErrMemoryPressure.
+// Set to 0 to disable memory checking (not recommended in containers).
+func WithMemoryLimit(limit uint64) BrokerOption {
+	return func(b *Broker) { b.memoryLimit = limit }
+}
+
 // NewBroker creates a new broker.
 func NewBroker(opts ...BrokerOption) *Broker {
 	b := &Broker{
-		queues: make(map[string]*Queue),
-		done:   make(chan struct{}),
-		dedup:  NewIdempotencyTracker(DefaultIdempotencyTTL),
+		queues:      make(map[string]*Queue),
+		done:        make(chan struct{}),
+		dedup:       NewIdempotencyTracker(DefaultIdempotencyTTL),
+		memoryLimit: DefaultMemoryLimit,
 	}
 	for _, opt := range opts {
 		opt(b)
 	}
 	go b.reaper()
 	return b
+}
+
+// CheckMemoryPressure returns ErrMemoryPressure if memory usage exceeds limit.
+// The check is throttled to avoid expensive MemStats calls on every publish.
+func (b *Broker) CheckMemoryPressure() error {
+	if b.memoryLimit == 0 {
+		return nil
+	}
+
+	// Only check every 10 calls to balance overhead vs responsiveness
+	count := b.memCheck.Add(1)
+	if count%10 != 0 {
+		return nil
+	}
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	if m.Alloc > b.memoryLimit {
+		return ErrMemoryPressure
+	}
+	return nil
 }
 
 // reaper periodically checks for expired in-flight messages.

@@ -10,7 +10,10 @@ import (
 var ErrQueueFull = errors.New("queue is full")
 
 // DefaultMaxQueueSize is the default maximum number of messages in a queue.
-const DefaultMaxQueueSize = 1_000_000
+// Set conservatively for 512MB container with ~10KB average message size.
+// BadgerDB uses ~3x message size due to mmap overhead.
+// Can be increased via queue config for larger containers.
+const DefaultMaxQueueSize = 10_000
 
 // Consumer represents a message consumer channel.
 type Consumer struct {
