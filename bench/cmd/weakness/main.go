@@ -1,0 +1,294 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/jonas/qwer-q/bench/adapters"
+	"github.com/jonas/qwer-q/bench/scenarios"
+)
+
+var (
+	qwerqAddr    = flag.String("qwerq-addr", "localhost:9876", "QWER-Q server address")
+	natsURL      = flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
+	rabbitmqURL  = flag.String("rabbitmq-url", "amqp://guest:guest@localhost:5672/", "RabbitMQ URL")
+	redisAddr    = flag.String("redis-addr", "localhost:6379", "Redis address")
+	kafkaBrokers = flag.String("kafka-brokers", "localhost:9092", "Kafka broker addresses")
+	queues       = flag.String("queues", "qwerq,nats,kafka,redis", "Comma-separated list of queues")
+	tests        = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery")
+	skipDocker   = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
+)
+
+func main() {
+	flag.Parse()
+
+	fmt.Println("╔═══════════════════════════════════════════════════════════════╗")
+	fmt.Println("║       QWER-Q Weakness Finding & Breaking Point Suite          ║")
+	fmt.Println("╚═══════════════════════════════════════════════════════════════╝")
+	fmt.Println()
+	fmt.Println("Goal: Find weaknesses, breaking points, and failure modes")
+	fmt.Println("All queues run in Docker with identical resource limits:")
+	fmt.Println("  - CPU: 1 core")
+	fmt.Println("  - Memory: 512MB")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	if !*skipDocker {
+		fmt.Println("Starting Docker containers...")
+		if err := startContainers(); err != nil {
+			fmt.Printf("Failed to start containers: %v\n", err)
+			fmt.Println("Run with --skip-docker if containers are already running")
+			os.Exit(1)
+		}
+		fmt.Println("Waiting for services to be ready...")
+		time.Sleep(10 * time.Second)
+	}
+
+	// Build adapter list
+	queueList := strings.Split(*queues, ",")
+	adapterMap := make(map[string]adapters.Adapter)
+	for _, q := range queueList {
+		q = strings.TrimSpace(q)
+		switch q {
+		case "qwerq":
+			adapterMap[q] = adapters.NewQWERQAdapter(*qwerqAddr)
+		case "nats":
+			adapterMap[q] = adapters.NewNATSAdapter(*natsURL)
+		case "rabbitmq":
+			adapterMap[q] = adapters.NewRabbitMQAdapter(*rabbitmqURL)
+		case "redis":
+			adapterMap[q] = adapters.NewRedisAdapter(*redisAddr)
+		case "kafka":
+			adapterMap[q] = adapters.NewKafkaAdapter(*kafkaBrokers)
+		}
+	}
+
+	testList := strings.Split(*tests, ",")
+	runAll := contains(testList, "all")
+
+	// TEST 1: Breaking Point Analysis
+	if runAll || contains(testList, "breaking") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Breaking Point Analysis")
+		fmt.Println("Find the throughput where each queue starts failing")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.BreakingPointResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			containerName := fmt.Sprintf("bench-%s-1", name)
+			result, err := scenarios.RunBreakingPointTest(ctx, adapter, containerName)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintBreakingPointResults(results)
+	}
+
+	// TEST 2: Memory Pressure
+	if runAll || contains(testList, "memory") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Memory Pressure")
+		fmt.Println("Publish 10KB messages until memory limit is reached")
+		fmt.Println("Container limit: 512MB")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		// 512MB / 10KB = ~50,000 messages to fill memory
+		maxMessages := 50000
+
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunMemoryPressureTest(ctx, adapter, maxMessages)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			rate := float64(result.Published) / result.Duration.Seconds()
+			fmt.Printf("  Published: %d, Rate: %.0f/s, Errors: %d\n",
+				result.Published, rate, result.PubErrors)
+
+			// Get container memory stats
+			stats := getContainerStats(name)
+			if stats != nil {
+				fmt.Printf("  Memory: %.1fMB / %.1fMB (%.1f%%)\n",
+					stats.MemoryMB, stats.MemoryLimitMB, stats.MemoryPercent)
+			}
+		}
+	}
+
+	// TEST 3: Connection Storm
+	if runAll || contains(testList, "connections") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Connection Storm")
+		fmt.Println("Rapidly create 100 concurrent connections")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.ConnectionStormResult)
+		for name := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+
+			var factory func() adapters.Adapter
+			switch name {
+			case "qwerq":
+				factory = func() adapters.Adapter { return adapters.NewQWERQAdapter(*qwerqAddr) }
+			case "nats":
+				factory = func() adapters.Adapter { return adapters.NewNATSAdapter(*natsURL) }
+			case "rabbitmq":
+				factory = func() adapters.Adapter { return adapters.NewRabbitMQAdapter(*rabbitmqURL) }
+			case "redis":
+				factory = func() adapters.Adapter { return adapters.NewRedisAdapter(*redisAddr) }
+			case "kafka":
+				factory = func() adapters.Adapter { return adapters.NewKafkaAdapter(*kafkaBrokers) }
+			}
+
+			result, err := scenarios.RunConnectionStormTest(ctx, factory, 100)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintConnectionStormResults(results)
+	}
+
+	// TEST 4: Crash Recovery
+	if runAll || contains(testList, "recovery") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Crash Recovery")
+		fmt.Println("Publish messages, simulate crash, verify data survives")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.RecoveryResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunCrashRecoveryTest(ctx, adapter, 10000)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintRecoveryResults(results)
+	}
+
+	// Print container resource usage summary
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("Container Resource Usage (via docker stats)")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	printDockerStats()
+
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("Weakness Analysis Complete!")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+}
+
+func startContainers() error {
+	cmd := exec.Command("docker", "compose", "-f", "bench/docker-compose.yml", "up", "-d", "--build")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func contains(list []string, item string) bool {
+	for _, v := range list {
+		if strings.TrimSpace(v) == item {
+			return true
+		}
+	}
+	return false
+}
+
+type ContainerStats struct {
+	Name           string
+	CPUPercent     float64
+	MemoryMB       float64
+	MemoryLimitMB  float64
+	MemoryPercent  float64
+	NetworkRxMB    float64
+	NetworkTxMB    float64
+}
+
+func getContainerStats(name string) *ContainerStats {
+	containerName := fmt.Sprintf("bench-%s-1", name)
+
+	// Use docker stats API
+	url := fmt.Sprintf("http://localhost:8080/api/v1.3/docker/%s", containerName)
+	resp, err := http.Get(url)
+	if err != nil {
+		// Fallback to docker stats command
+		return getContainerStatsFromDocker(containerName)
+	}
+	defer resp.Body.Close()
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return getContainerStatsFromDocker(containerName)
+	}
+
+	// Parse cAdvisor response (simplified)
+	return &ContainerStats{Name: containerName}
+}
+
+func getContainerStatsFromDocker(containerName string) *ContainerStats {
+	cmd := exec.Command("docker", "stats", containerName, "--no-stream", "--format",
+		"{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	stats := &ContainerStats{Name: containerName}
+	// Parse output (format: "0.50%	100MiB / 512MiB	19.53%")
+	parts := strings.Split(strings.TrimSpace(string(output)), "\t")
+	if len(parts) >= 3 {
+		fmt.Sscanf(strings.TrimSuffix(parts[0], "%"), "%f", &stats.CPUPercent)
+		fmt.Sscanf(strings.TrimSuffix(parts[2], "%"), "%f", &stats.MemoryPercent)
+
+		memParts := strings.Split(parts[1], " / ")
+		if len(memParts) == 2 {
+			stats.MemoryMB = parseMemory(memParts[0])
+			stats.MemoryLimitMB = parseMemory(memParts[1])
+		}
+	}
+	return stats
+}
+
+func parseMemory(s string) float64 {
+	s = strings.TrimSpace(s)
+	var value float64
+	if strings.HasSuffix(s, "GiB") {
+		fmt.Sscanf(s, "%fGiB", &value)
+		return value * 1024
+	}
+	if strings.HasSuffix(s, "MiB") {
+		fmt.Sscanf(s, "%fMiB", &value)
+		return value
+	}
+	if strings.HasSuffix(s, "KiB") {
+		fmt.Sscanf(s, "%fKiB", &value)
+		return value / 1024
+	}
+	return 0
+}
+
+func printDockerStats() {
+	cmd := exec.Command("docker", "stats", "--no-stream", "--format",
+		"table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
