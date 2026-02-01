@@ -1,0 +1,16 @@
+run:
+  timeout: 5m
+  tests: false  # Don't lint test files for now
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - staticcheck
+    - unused
+  disable:
+    - errcheck  # Many unchecked errors in existing code, enable later
+
+issues:
+  exclude-dirs:
+    - bench  # Benchmark code doesn't need strict linting
