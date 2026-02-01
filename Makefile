@@ -1,4 +1,4 @@
-.PHONY: build test run clean lint docker-up docker-down docker-clean docker-restart bench
+.PHONY: build test run clean lint docker-up docker-down docker-clean docker-restart bench bench-all
 
 BINARY=bin/qwer-q
 

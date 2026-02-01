@@ -57,7 +57,9 @@ func NewBroker(opts ...BrokerOption) *Broker {
 		opt(b)
 	}
 	go b.reaper()
-	go b.memoryMonitor()
+	if b.memoryLimit != 0 {
+		go b.memoryMonitor()
+	}
 	return b
 }
 
