@@ -18,6 +18,36 @@ This document tracks weaknesses found during benchmarking. Issues are documented
 
 ## Fixed Weaknesses
 
+### W-009: ReadMemStats Stop-the-World Blocks Consumer
+**Status:** Fixed
+**Severity:** Critical
+**Found:** 2026-02-01
+**Fixed:** 2026-02-01
+
+**Description:**
+Consumer stops receiving messages after ~3.4K messages, completely stalling (0 msgs/sec).
+
+**Root Cause:**
+- `runtime.ReadMemStats` called every 10th publish operation
+- ReadMemStats is a stop-the-world (STW) operation that pauses ALL goroutines
+- Under high load, hundreds of STW pauses per second
+- Consumer delivery goroutine gets blocked repeatedly until it falls behind permanently
+
+**Fix:**
+- Move ReadMemStats to dedicated background goroutine
+- Update cached memory value every 100ms
+- Hot path reads atomic cached value (zero allocation, no STW)
+- Increased memory limit from 300MB to 400MB (BadgerDB baseline needs more)
+
+**Results:**
+| Metric | Before | After |
+|--------|--------|-------|
+| Throughput | 460/s | 3.4K/s |
+| Total consumed (30s) | 4.1K | 99K+ |
+| Consumer stalls | Yes (stops at 3.4K) | No |
+
+---
+
 ### W-008: OOM with Large Messages (256KB+)
 **Status:** Fixed
 **Severity:** Critical
@@ -53,10 +83,9 @@ Container OOM killed (exit 137) when processing 256KB messages.
 **Description:**
 With 100ms sync interval (default), throughput is ~500-1000/s. This is a design choice for durability.
 
-**Classification:** This is an **expected trade-off**, not a bug. Users can adjust via `--sync-interval` flag:
-- `--sync-interval=100ms` (default): ~500/s, max 100ms data loss
-- `--sync-interval=1s`: ~5000/s, max 1s data loss
-- `--sync-interval=0`: Sync every write, slowest but safest
+**Classification:** This is an **expected trade-off**, not a bug. Default is 100ms sync interval.
+
+**Note:** The `--sync-interval` CLI flag is not yet implemented. The storage layer supports `WithSyncInterval()` option but it's not exposed via CLI. For now, only the default 100ms interval is available.
 
 **Action:** Document trade-offs clearly. No code fix needed.
 

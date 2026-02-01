@@ -1,4 +1,4 @@
-.PHONY: build test run clean lint
+.PHONY: build test run clean lint docker-up docker-down docker-clean docker-restart bench
 
 BINARY=bin/qwer-q
 
@@ -16,5 +16,34 @@ clean:
 
 lint:
 	golangci-lint run
+
+# Docker commands
+docker-up:
+	docker compose up -d --build
+
+docker-down:
+	docker compose down
+
+docker-clean:
+	docker compose down -v
+	@echo "Cleaned: containers stopped, volumes removed"
+
+docker-restart:
+	docker compose down -v
+	docker compose up -d --build
+	@echo "Fresh restart complete"
+
+# Benchmark (runs against fresh container)
+bench:
+	docker compose down -v
+	docker compose up -d --build
+	@sleep 3
+	go run bench/cmd/stress/main.go --queues=qwerq --tests=sustained --duration=30s
+
+bench-all:
+	docker compose down -v
+	docker compose up -d --build
+	@sleep 3
+	go run bench/cmd/stress/main.go --queues=qwerq --tests=all --duration=30s
 
 .DEFAULT_GOAL := build

@@ -14,9 +14,10 @@ import (
 // ErrMemoryPressure is returned when memory usage exceeds the limit.
 var ErrMemoryPressure = errors.New("memory pressure: server under load, try again later")
 
-// DefaultMemoryLimit is the default memory limit (300MB - leaves headroom in 512MB container).
-// BadgerDB uses mmap which doesn't show in Go's MemStats but counts toward container memory.
-const DefaultMemoryLimit = 300 * 1024 * 1024
+// DefaultMemoryLimit is the default memory limit (400MB - leaves ~100MB headroom in 512MB container).
+// BadgerDB uses ~100-150MB for memtables and caches, plus Go runtime overhead.
+// Previous 300MB limit was too aggressive and triggered false memory pressure.
+const DefaultMemoryLimit = 400 * 1024 * 1024
 
 // Broker manages queues and message routing.
 type Broker struct {
@@ -26,7 +27,7 @@ type Broker struct {
 	storage     storage.Storage
 	dedup       *IdempotencyTracker
 	memoryLimit uint64        // Maximum memory in bytes (0 = unlimited)
-	memCheck    atomic.Uint64 // Counter to throttle memory checks
+	cachedAlloc atomic.Uint64 // Cached memory allocation (updated by background goroutine)
 }
 
 // BrokerOption configures a Broker.
@@ -56,6 +57,7 @@ func NewBroker(opts ...BrokerOption) *Broker {
 		opt(b)
 	}
 	go b.reaper()
+	go b.memoryMonitor()
 	return b
 }
 
@@ -64,37 +66,44 @@ func NewBroker(opts ...BrokerOption) *Broker {
 const LargeMessageThreshold = 64 * 1024 // 64KB
 
 // CheckMemoryPressure returns ErrMemoryPressure if memory usage exceeds limit.
-// The check is throttled to avoid expensive MemStats calls on every publish.
+// Uses cached memory stats to avoid expensive ReadMemStats calls in the hot path.
 func (b *Broker) CheckMemoryPressure() error {
-	return b.checkMemory(false)
-}
-
-// CheckMemoryPressureEager always performs the memory check (not throttled).
-// Use this for large messages where the allocation cost is significant.
-func (b *Broker) CheckMemoryPressureEager() error {
-	return b.checkMemory(true)
-}
-
-func (b *Broker) checkMemory(eager bool) error {
 	if b.memoryLimit == 0 {
 		return nil
 	}
-
-	if !eager {
-		// Only check every 10 calls to balance overhead vs responsiveness
-		// Use != 1 so first call triggers a check (count=1, 11, 21, ...)
-		count := b.memCheck.Add(1)
-		if count%10 != 1 {
-			return nil
-		}
-	}
-
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	if m.Alloc > b.memoryLimit {
+	if b.cachedAlloc.Load() > b.memoryLimit {
 		return ErrMemoryPressure
 	}
 	return nil
+}
+
+// CheckMemoryPressureEager is now equivalent to CheckMemoryPressure since we use
+// cached stats. Kept for API compatibility.
+func (b *Broker) CheckMemoryPressureEager() error {
+	return b.CheckMemoryPressure()
+}
+
+// memoryMonitor updates cached memory stats periodically.
+// This runs ReadMemStats in a dedicated goroutine to avoid blocking the hot path.
+// Update interval of 100ms provides responsive memory pressure detection.
+func (b *Broker) memoryMonitor() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	// Initial read
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	b.cachedAlloc.Store(m.Alloc)
+
+	for {
+		select {
+		case <-ticker.C:
+			runtime.ReadMemStats(&m)
+			b.cachedAlloc.Store(m.Alloc)
+		case <-b.done:
+			return
+		}
+	}
 }
 
 // reaper periodically checks for expired in-flight messages.
