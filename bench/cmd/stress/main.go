@@ -14,15 +14,17 @@ import (
 )
 
 var (
-	qwerqAddr    = flag.String("qwerq-addr", "localhost:9876", "QWER-Q server address")
-	natsURL      = flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
-	rabbitmqURL  = flag.String("rabbitmq-url", "amqp://guest:guest@localhost:5672/", "RabbitMQ URL")
-	redisAddr    = flag.String("redis-addr", "localhost:6379", "Redis address")
-	kafkaBrokers = flag.String("kafka-brokers", "localhost:9092", "Kafka broker addresses")
-	queues       = flag.String("queues", "qwerq,nats,rabbitmq,redis,kafka", "Comma-separated list of queues to test")
-	tests        = flag.String("tests", "all", "Tests to run: all, sustained, concurrency, sizes, depth, burst, lag")
-	duration     = flag.Duration("duration", 60*time.Second, "Duration for sustained tests")
-	messageSize  = flag.Int("message-size", 1024, "Message size in bytes")
+	qwerqAddr       = flag.String("qwerq-addr", "localhost:9876", "QWER-Q server address")
+	natsURL         = flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
+	rabbitmqURL     = flag.String("rabbitmq-url", "amqp://guest:guest@localhost:5672/", "RabbitMQ URL")
+	redisAddr       = flag.String("redis-addr", "localhost:6379", "Redis address")
+	kafkaBrokers    = flag.String("kafka-brokers", "localhost:9092", "Kafka broker addresses")
+	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
+	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
+	queues          = flag.String("queues", "qwerq,nats,rabbitmq,redis,kafka,pulsar,redpanda", "Comma-separated list of queues to test")
+	tests           = flag.String("tests", "all", "Tests to run: all, sustained, concurrency, sizes, depth, burst, lag")
+	duration        = flag.Duration("duration", 60*time.Second, "Duration for sustained tests")
+	messageSize     = flag.Int("message-size", 1024, "Message size in bytes")
 )
 
 func main() {
@@ -51,6 +53,10 @@ func main() {
 			adapterList = append(adapterList, adapters.NewRedisAdapter(*redisAddr))
 		case "kafka":
 			adapterList = append(adapterList, adapters.NewKafkaAdapter(*kafkaBrokers))
+		case "pulsar":
+			adapterList = append(adapterList, adapters.NewPulsarAdapter(*pulsarURL))
+		case "redpanda":
+			adapterList = append(adapterList, adapters.NewRedPandaAdapter(*redpandaBrokers))
 		default:
 			fmt.Printf("Unknown queue: %s\n", q)
 			os.Exit(1)

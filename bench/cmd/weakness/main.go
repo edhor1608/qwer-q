@@ -16,14 +16,16 @@ import (
 )
 
 var (
-	qwerqAddr    = flag.String("qwerq-addr", "localhost:9876", "QWER-Q server address")
-	natsURL      = flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
-	rabbitmqURL  = flag.String("rabbitmq-url", "amqp://guest:guest@localhost:5672/", "RabbitMQ URL")
-	redisAddr    = flag.String("redis-addr", "localhost:6379", "Redis address")
-	kafkaBrokers = flag.String("kafka-brokers", "localhost:9092", "Kafka broker addresses")
-	queues       = flag.String("queues", "qwerq,nats,kafka,redis", "Comma-separated list of queues")
-	tests        = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery")
-	skipDocker   = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
+	qwerqAddr       = flag.String("qwerq-addr", "localhost:9876", "QWER-Q server address")
+	natsURL         = flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
+	rabbitmqURL     = flag.String("rabbitmq-url", "amqp://guest:guest@localhost:5672/", "RabbitMQ URL")
+	redisAddr       = flag.String("redis-addr", "localhost:6379", "Redis address")
+	kafkaBrokers    = flag.String("kafka-brokers", "localhost:9092", "Kafka broker addresses")
+	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
+	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
+	queues          = flag.String("queues", "qwerq,nats,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
+	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery")
+	skipDocker      = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
 )
 
 func main() {
@@ -68,6 +70,10 @@ func main() {
 			adapterMap[q] = adapters.NewRedisAdapter(*redisAddr)
 		case "kafka":
 			adapterMap[q] = adapters.NewKafkaAdapter(*kafkaBrokers)
+		case "pulsar":
+			adapterMap[q] = adapters.NewPulsarAdapter(*pulsarURL)
+		case "redpanda":
+			adapterMap[q] = adapters.NewRedPandaAdapter(*redpandaBrokers)
 		}
 	}
 
@@ -152,6 +158,10 @@ func main() {
 				factory = func() adapters.Adapter { return adapters.NewRedisAdapter(*redisAddr) }
 			case "kafka":
 				factory = func() adapters.Adapter { return adapters.NewKafkaAdapter(*kafkaBrokers) }
+			case "pulsar":
+				factory = func() adapters.Adapter { return adapters.NewPulsarAdapter(*pulsarURL) }
+			case "redpanda":
+				factory = func() adapters.Adapter { return adapters.NewRedPandaAdapter(*redpandaBrokers) }
 			}
 
 			result, err := scenarios.RunConnectionStormTest(ctx, factory, 100)

@@ -97,6 +97,43 @@ services:
           cpus: '0.5'
           memory: 256M
 
+  # Pulsar - high throughput, tiered storage
+  pulsar:
+    image: apachepulsar/pulsar:3.1.0
+    ports:
+      - "6650:6650"   # binary protocol
+      - "8081:8080"   # HTTP admin (8080 used by cadvisor)
+    command: ["bin/pulsar", "standalone"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # RedPanda - Kafka-compatible, zero data loss focus
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.5
+    ports:
+      - "9093:9093"   # Kafka API (9092 used by Kafka)
+      - "8082:8082"   # HTTP Proxy
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --kafka-addr=0.0.0.0:9093
+      - --advertise-kafka-addr=localhost:9093
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
   # Monitoring stack for resource tracking
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
