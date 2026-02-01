@@ -24,7 +24,7 @@ var (
 	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
 	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
 	queues          = flag.String("queues", "qwerq,nats,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
-	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, ordering, exactlyonce, backpressure")
+	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, durability, ordering, exactlyonce, backpressure")
 	skipDocker      = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
 )
 
@@ -195,7 +195,42 @@ func main() {
 		scenarios.PrintRecoveryResults(results)
 	}
 
-	// TEST 5: Ordering Guarantees
+	// TEST 5: Durability (Hard Crash / Power Loss Simulation)
+	if runAll || contains(testList, "durability") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Durability (Power Loss Simulation)")
+		fmt.Println("SIGKILL container after publishing - no graceful shutdown")
+		fmt.Println("This reveals TRUE durability: was data fsynced to disk?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.DurabilityResult)
+		for name, adapter := range adapterMap {
+			containerName := scenarios.GetContainerName(adapter.Name())
+			if containerName == "" {
+				fmt.Printf("Skipping %s (no container mapping)\n", name)
+				continue
+			}
+
+			fmt.Printf("Testing %s...\n", name)
+			cfg := scenarios.DurabilityConfig{
+				MessageCount:  1000,
+				MessageSize:   1024,
+				ContainerName: containerName,
+				WaitAfterPub:  0, // Immediate crash after publish
+				HardKill:      true,
+			}
+			result, err := scenarios.RunDurabilityTest(ctx, adapter, cfg)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintDurabilityResults(results)
+	}
+
+	// TEST 6: Ordering Guarantees
 	if runAll || contains(testList, "ordering") {
 		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Println("TEST: Ordering Guarantees")
