@@ -24,7 +24,7 @@ var (
 	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
 	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
 	queues          = flag.String("queues", "qwerq,nats,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
-	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, durability, ordering, exactlyonce, backpressure")
+	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, durability, ordering, exactlyonce, backpressure, redelivery, poison, fairness, network, ttl, largemsg")
 	skipDocker      = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
 )
 
@@ -291,6 +291,161 @@ func main() {
 			results[name] = result
 		}
 		scenarios.PrintBackpressureResults(results)
+	}
+
+	// TEST 8: Redelivery Timeout
+	if runAll || contains(testList, "redelivery") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Redelivery Timeout")
+		fmt.Println("Consumer holds message without ACK - does it get redelivered?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.RedeliveryResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunRedeliveryTest(ctx, adapter, 10, 5*time.Second, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintRedeliveryResults(results)
+	}
+
+	// TEST 9: Poison Message Handling
+	if runAll || contains(testList, "poison") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Poison Message Handling")
+		fmt.Println("Message always fails - infinite retry? DLQ? Queue blocked?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.PoisonResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunPoisonMessageTest(ctx, adapter, 10, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintPoisonResults(results)
+	}
+
+	// TEST 10: Multi-Consumer Fairness
+	if runAll || contains(testList, "fairness") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Multi-Consumer Fairness")
+		fmt.Println("Are messages distributed evenly among N consumers?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.FairnessResult)
+		for name := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+
+			var factory func() adapters.Adapter
+			switch name {
+			case "qwerq":
+				factory = func() adapters.Adapter { return adapters.NewQWERQAdapter(*qwerqAddr) }
+			case "nats":
+				factory = func() adapters.Adapter { return adapters.NewNATSAdapter(*natsURL) }
+			case "rabbitmq":
+				factory = func() adapters.Adapter { return adapters.NewRabbitMQAdapter(*rabbitmqURL) }
+			case "redis":
+				factory = func() adapters.Adapter { return adapters.NewRedisAdapter(*redisAddr) }
+			case "kafka":
+				factory = func() adapters.Adapter { return adapters.NewKafkaAdapter(*kafkaBrokers) }
+			case "pulsar":
+				factory = func() adapters.Adapter { return adapters.NewPulsarAdapter(*pulsarURL) }
+			case "redpanda":
+				factory = func() adapters.Adapter { return adapters.NewRedPandaAdapter(*redpandaBrokers) }
+			}
+
+			if factory == nil {
+				continue
+			}
+
+			result, err := scenarios.RunFairnessTest(ctx, factory, 5, 1000, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintFairnessResults(results)
+	}
+
+	// TEST 11: Network Disruption
+	if runAll || contains(testList, "network") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Network Disruption")
+		fmt.Println("Disconnect/reconnect container network - observe behavior")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.NetworkResult)
+		for name, adapter := range adapterMap {
+			containerName := scenarios.GetContainerName(adapter.Name())
+			if containerName == "" {
+				fmt.Printf("Skipping %s (no container mapping)\n", name)
+				continue
+			}
+
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunNetworkTimeoutTest(ctx, adapter, containerName, "bench_default")
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintNetworkResults(results)
+	}
+
+	// TEST 12: Message TTL/Expiry
+	if runAll || contains(testList, "ttl") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Message TTL/Expiry")
+		fmt.Println("Do undelivered messages expire?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.TTLResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunTTLTest(ctx, adapter, 100, 10*time.Second, 15*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintTTLResults(results)
+	}
+
+	// TEST 13: Large Message Handling
+	if runAll || contains(testList, "largemsg") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Large Message Handling")
+		fmt.Println("Testing messages from 10KB to 10MB")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.LargeMsgResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunLargeMessageTest(ctx, adapter, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintLargeMsgResults(results)
 	}
 
 	// Print container resource usage summary
