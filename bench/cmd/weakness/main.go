@@ -24,7 +24,7 @@ var (
 	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
 	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
 	queues          = flag.String("queues", "qwerq,nats,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
-	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, durability, ordering, exactlyonce, backpressure, redelivery, poison, fairness, network, ttl, largemsg")
+	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, durability, ordering, exactlyonce, backpressure, redelivery, poison, fairness, network, ttl, largemsg, diskfull, reconnect, manyqueues")
 	skipDocker      = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
 )
 
@@ -446,6 +446,75 @@ func main() {
 			results[name] = result
 		}
 		scenarios.PrintLargeMsgResults(results)
+	}
+
+	// TEST 14: Disk Full Handling
+	if runAll || contains(testList, "diskfull") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Disk Full Handling")
+		fmt.Println("Publish large messages until storage fills - graceful error?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.DiskFullResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunDiskFullTest(ctx, adapter, 60*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintDiskFullResults(results)
+	}
+
+	// TEST 15: Broker Restart Reconnect
+	if runAll || contains(testList, "reconnect") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Broker Restart Reconnect")
+		fmt.Println("Restart broker - does client auto-reconnect?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.ReconnectResult)
+		for name, adapter := range adapterMap {
+			containerName := scenarios.GetContainerName(adapter.Name())
+			if containerName == "" {
+				fmt.Printf("Skipping %s (no container mapping)\n", name)
+				continue
+			}
+
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunReconnectTest(ctx, adapter, containerName, 1000, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintReconnectResults(results)
+	}
+
+	// TEST 16: Many Queues Scalability
+	if runAll || contains(testList, "manyqueues") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Many Queues Scalability")
+		fmt.Println("Performance with 1/10/50/100 queues - throughput degradation?")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.ManyQueuesResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunManyQueuesTest(ctx, adapter, 100, 60*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintManyQueuesResults(results)
 	}
 
 	// Print container resource usage summary
