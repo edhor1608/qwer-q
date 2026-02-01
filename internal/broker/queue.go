@@ -10,10 +10,10 @@ import (
 var ErrQueueFull = errors.New("queue is full")
 
 // DefaultMaxQueueSize is the default maximum number of messages in a queue.
-// Set conservatively for 512MB container with ~10KB average message size.
-// BadgerDB uses ~3x message size due to mmap overhead.
-// Can be increased via queue config for larger containers.
-const DefaultMaxQueueSize = 10_000
+// With 1KB messages and 3x BadgerDB overhead, 100k = ~300MB.
+// Safe for 512MB container with room for code and other queues.
+// Can be adjusted via queue config for different workloads.
+const DefaultMaxQueueSize = 100_000
 
 // Consumer represents a message consumer channel.
 type Consumer struct {
@@ -151,7 +151,7 @@ func (q *Queue) tryDeliver() {
 
 // Dequeue returns a consumer channel for receiving messages.
 func (q *Queue) Dequeue(visibilityTimeout time.Duration) <-chan *Message {
-	ch := make(chan *Message, 1)
+	ch := make(chan *Message, 100) // Buffer for prefetch throughput
 	c := &Consumer{
 		Ch:                ch,
 		VisibilityTimeout: visibilityTimeout,
