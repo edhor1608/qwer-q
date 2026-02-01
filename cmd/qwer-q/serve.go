@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jonas/qwer-q/internal/broker"
+	"github.com/jonas/qwer-q/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -21,18 +22,37 @@ var serveCmd = &cobra.Command{
 func init() {
 	serveCmd.Flags().IntP("port", "p", 9876, "port to listen on")
 	serveCmd.Flags().Int("metrics-port", 9877, "metrics server port")
-	serveCmd.Flags().String("data-dir", "", "data directory (not used yet)")
+	serveCmd.Flags().String("data-dir", "/data", "data directory for message persistence")
 	rootCmd.AddCommand(serveCmd)
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
 	port, _ := cmd.Flags().GetInt("port")
 	metricsPort, _ := cmd.Flags().GetInt("metrics-port")
+	dataDir, _ := cmd.Flags().GetString("data-dir")
 	addr := fmt.Sprintf(":%d", port)
 	metricsAddr := fmt.Sprintf(":%d", metricsPort)
 
-	b := broker.NewBroker()
+	var opts []broker.BrokerOption
+
+	// Initialize persistent storage if data directory is specified
+	if dataDir != "" {
+		store, err := storage.NewBadgerStorage(dataDir)
+		if err != nil {
+			return fmt.Errorf("failed to open storage: %w", err)
+		}
+		opts = append(opts, broker.WithStorage(store))
+	}
+
+	b := broker.NewBroker(opts...)
 	defer b.Close()
+
+	// Load persisted messages from storage (only if storage is configured)
+	if dataDir != "" {
+		if err := b.LoadFromStorage(); err != nil {
+			return fmt.Errorf("failed to load from storage: %w", err)
+		}
+	}
 
 	srv := broker.NewServer(b)
 	metricsSrv := broker.NewMetricsServer(metricsAddr)

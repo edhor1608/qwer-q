@@ -7,6 +7,7 @@ services:
       - "9877:9877"
     volumes:
       - qwer-q-data:/data
+    command: ["serve", "--sync-interval=1s"]  # 1s sync for higher throughput (benchmarking)
     deploy:
       resources:
         limits:
