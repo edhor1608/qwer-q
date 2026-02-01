@@ -8,6 +8,9 @@ import (
 // DefaultIdempotencyTTL is the default time-to-live for idempotency keys.
 const DefaultIdempotencyTTL = 5 * time.Minute
 
+// MaxIdempotencyKeys is the maximum number of keys to track before forced cleanup.
+const MaxIdempotencyKeys = 100000
+
 // ErrDuplicateMessage indicates a message with the same idempotency key was already processed.
 type ErrDuplicateMessage struct {
 	Key string
@@ -55,13 +58,18 @@ func (t *IdempotencyTracker) Check(key string) error {
 		return ErrDuplicateMessage{Key: key}
 	}
 
+	// Force cleanup if we're at max capacity
+	if len(t.keys) >= MaxIdempotencyKeys {
+		t.cleanupLocked(now)
+	}
+
 	t.keys[key] = now.Add(t.ttl)
 	return nil
 }
 
 // cleaner periodically removes expired keys.
 func (t *IdempotencyTracker) cleaner() {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(10 * time.Second) // More aggressive cleanup
 	defer ticker.Stop()
 
 	for {
@@ -78,8 +86,11 @@ func (t *IdempotencyTracker) cleaner() {
 func (t *IdempotencyTracker) cleanup() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.cleanupLocked(time.Now())
+}
 
-	now := time.Now()
+// cleanupLocked removes expired keys (caller must hold lock).
+func (t *IdempotencyTracker) cleanupLocked(now time.Time) {
 	for key, expiry := range t.keys {
 		if now.After(expiry) {
 			delete(t.keys, key)

@@ -575,3 +575,101 @@ Layered: thin core + optional smart layer.
 - Batteries package: reconnect, pooling, typed wrappers, retry
 - Gateway project builds on core, may use or replace batteries
 - Documentation covers both levels
+
+---
+
+## DEC-022: Queue Size 100k Default
+**Date:** 2026-02-01
+**Status:** Decided
+
+### Context
+Original `DefaultMaxQueueSize = 10,000` was too conservative. Benchmarks showed queue filling in ~2 seconds at 5k msgs/sec, causing 19k errors.
+
+Original math assumed 10KB messages with 3x BadgerDB overhead. Reality: most messages are 1KB or less.
+
+### Decision
+Increase `DefaultMaxQueueSize` from 10,000 to 100,000 messages.
+
+### Rationale
+- 100k × 1KB × 3x overhead = 300MB, safe for 512MB container
+- Allows for burst absorption when consumer lags
+- Still provides backpressure protection
+- Benchmark improvement: 960/s → 2,258/s (+135%)
+
+### Consequences
+- Higher memory usage under load (intended)
+- More messages buffered before rejection
+- May need tuning for smaller containers
+
+---
+
+## DEC-023: Consumer Channel Buffer 100
+**Date:** 2026-02-01
+**Status:** Decided
+
+### Context
+Consumer channel had buffer of 1, limiting prefetch to single message. Consumer had to ack before receiving next message.
+
+### Decision
+Increase consumer channel buffer from 1 to 100 messages.
+
+### Rationale
+- Enables prefetching — consumer can receive messages while processing
+- Reduces round-trips between broker and consumer
+- Standard pattern in message queues (RabbitMQ prefetch, SQS batch)
+- Combined with queue size increase for +135% throughput
+
+### Consequences
+- 100 messages can be in-flight per consumer
+- Higher memory per consumer connection
+- Faster message delivery
+
+---
+
+## DEC-024: Configurable Sync Interval (Default 100ms)
+**Date:** 2026-02-01
+**Status:** Decided
+
+### Context
+BadgerDB sync (fsync) was happening every write, limiting throughput. Options:
+1. Sync every write — maximum durability, minimum throughput
+2. Periodic sync — trade durability window for throughput
+3. Manual sync — maximum throughput, application controls
+
+### Decision
+Configurable sync interval via `--sync-interval` CLI flag. Default 100ms (safe). Benchmarks use 1s.
+
+### Rationale
+- 1s sync is standard for databases (PostgreSQL default)
+- Trade-off: may lose up to interval of data on crash
+- Benchmark: 100ms → 1s gave 2,258/s → 4,846/s (+115%)
+- User controls based on durability requirements
+
+### Consequences
+- New CLI flag: `--sync-interval`
+- Default: 100ms (reasonable durability)
+- Benchmarking: 1s (prioritize throughput)
+- Production critical: 0 (sync every write)
+
+---
+
+## DEC-025: Memory Pressure Backpressure
+**Date:** 2026-02-01
+**Status:** Decided
+
+### Context
+With larger queue size, memory can grow significantly. Need mechanism to reject messages before OOM.
+
+### Decision
+Monitor memory usage, reject publishes with "memory pressure" error when high.
+
+### Rationale
+- Prevents OOM crashes
+- Clear error message for client to retry
+- Works in addition to queue size limits
+- Container-aware (respects memory limits)
+
+### Consequences
+- New error: "memory pressure: server under load, try again later"
+- Broker remains responsive under load
+- Clients should implement backoff on this error

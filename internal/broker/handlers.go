@@ -11,6 +11,11 @@ const defaultVisibilityTimeout = 30 * time.Second
 
 // HandlePublish processes a publish request.
 func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishResponse, error) {
+	// Check memory pressure before accepting new messages
+	if err := b.CheckMemoryPressure(); err != nil {
+		return nil, err
+	}
+
 	// Check idempotency key
 	if b.dedup != nil {
 		if err := b.dedup.Check(req.GetIdempotencyKey()); err != nil {
