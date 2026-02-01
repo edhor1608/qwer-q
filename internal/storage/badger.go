@@ -2,7 +2,10 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -35,6 +38,7 @@ type BadgerStorage struct {
 	db           *badger.DB
 	done         chan struct{}
 	syncInterval time.Duration
+	closeOnce    sync.Once
 }
 
 // NewBadgerStorage opens or creates a BadgerDB at the given path.
@@ -42,6 +46,11 @@ func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, er
 	cfg := &badgerConfig{syncInterval: DefaultSyncInterval}
 	for _, opt := range options {
 		opt(cfg)
+	}
+
+	// Validate sync interval (negative would panic in time.NewTicker)
+	if cfg.syncInterval < 0 {
+		return nil, fmt.Errorf("sync interval must be >= 0, got %v", cfg.syncInterval)
 	}
 
 	// SyncWrites=true only if syncInterval is 0 (sync every write)
@@ -201,7 +210,9 @@ func (s *BadgerStorage) syncLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			s.db.Sync()
+			if err := s.db.Sync(); err != nil {
+				log.Printf("badger sync error: %v", err)
+			}
 		case <-s.done:
 			return
 		}
@@ -209,8 +220,15 @@ func (s *BadgerStorage) syncLoop() {
 }
 
 // Close syncs data and closes the database.
+// Safe to call multiple times.
 func (s *BadgerStorage) Close() error {
-	close(s.done)
-	s.db.Sync() // Final sync before close
-	return s.db.Close()
+	var closeErr error
+	s.closeOnce.Do(func() {
+		close(s.done)
+		if err := s.db.Sync(); err != nil {
+			log.Printf("badger final sync error: %v", err)
+		}
+		closeErr = s.db.Close()
+	})
+	return closeErr
 }
