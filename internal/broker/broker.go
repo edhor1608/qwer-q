@@ -59,18 +59,34 @@ func NewBroker(opts ...BrokerOption) *Broker {
 	return b
 }
 
+// LargeMessageThreshold is the size above which eager memory checks are performed.
+// Messages larger than this bypass the throttle and always check memory.
+const LargeMessageThreshold = 64 * 1024 // 64KB
+
 // CheckMemoryPressure returns ErrMemoryPressure if memory usage exceeds limit.
 // The check is throttled to avoid expensive MemStats calls on every publish.
 func (b *Broker) CheckMemoryPressure() error {
+	return b.checkMemory(false)
+}
+
+// CheckMemoryPressureEager always performs the memory check (not throttled).
+// Use this for large messages where the allocation cost is significant.
+func (b *Broker) CheckMemoryPressureEager() error {
+	return b.checkMemory(true)
+}
+
+func (b *Broker) checkMemory(eager bool) error {
 	if b.memoryLimit == 0 {
 		return nil
 	}
 
-	// Only check every 10 calls to balance overhead vs responsiveness
-	// Use != 1 so first call triggers a check (count=1, 11, 21, ...)
-	count := b.memCheck.Add(1)
-	if count%10 != 1 {
-		return nil
+	if !eager {
+		// Only check every 10 calls to balance overhead vs responsiveness
+		// Use != 1 so first call triggers a check (count=1, 11, 21, ...)
+		count := b.memCheck.Add(1)
+		if count%10 != 1 {
+			return nil
+		}
 	}
 
 	var m runtime.MemStats
