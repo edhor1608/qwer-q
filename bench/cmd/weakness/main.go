@@ -23,7 +23,7 @@ var (
 	kafkaBrokers    = flag.String("kafka-brokers", "localhost:9092", "Kafka broker addresses")
 	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
 	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
-	queues          = flag.String("queues", "qwerq,nats,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
+	queues          = flag.String("queues", "qwerq,nats,rabbitmq,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
 	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, durability, ordering, exactlyonce, backpressure, redelivery, poison, fairness, network, ttl, largemsg, diskfull, reconnect, manyqueues")
 	skipDocker      = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
 )
