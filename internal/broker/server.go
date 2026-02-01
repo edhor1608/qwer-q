@@ -18,6 +18,7 @@ type Server struct {
 	listener net.Listener
 	wg       sync.WaitGroup
 	done     chan struct{}
+	ready    chan struct{} // closed when server is listening
 }
 
 // NewServer creates a new server with the given broker.
@@ -26,6 +27,7 @@ func NewServer(broker *Broker) *Server {
 		broker:   broker,
 		registry: schema.NewRegistry(),
 		done:     make(chan struct{}),
+		ready:    make(chan struct{}),
 	}
 }
 
@@ -41,6 +43,7 @@ func (s *Server) ListenAndServe(addr string) error {
 		return err
 	}
 	s.listener = ln
+	close(s.ready) // Signal that server is ready
 
 	for {
 		conn, err := ln.Accept()
@@ -57,11 +60,15 @@ func (s *Server) ListenAndServe(addr string) error {
 	}
 }
 
+// WaitReady blocks until the server is listening.
+func (s *Server) WaitReady() {
+	<-s.ready
+}
+
 // Addr returns the server's listen address.
+// Waits for the server to be ready before returning.
 func (s *Server) Addr() net.Addr {
-	if s.listener == nil {
-		return nil
-	}
+	<-s.ready // Wait for server to start
 	return s.listener.Addr()
 }
 

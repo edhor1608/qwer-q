@@ -10,11 +10,11 @@ import (
 
 // Broker manages queues and message routing.
 type Broker struct {
-	mu        sync.RWMutex
-	queues    map[string]*Queue
-	done      chan struct{}
-	storage   storage.Storage
-	dedup     *IdempotencyTracker
+	mu      sync.RWMutex
+	queues  map[string]*Queue
+	done    chan struct{}
+	storage storage.Storage
+	dedup   *IdempotencyTracker
 }
 
 // BrokerOption configures a Broker.
