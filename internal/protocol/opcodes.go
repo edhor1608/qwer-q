@@ -20,20 +20,20 @@ const (
 
 // Server -> Client operations
 const (
-	OpPublishAck              OpCode = 0x02
-	OpMessage                 OpCode = 0x04
-	OpError                   OpCode = 0x07
-	OpExtendVisibilityAck     OpCode = 0x09
-	OpSchemaResponse          OpCode = 0x12
-	OpCallResponse            OpCode = 0x21
+	OpPublishAck          OpCode = 0x02
+	OpMessage             OpCode = 0x04
+	OpError               OpCode = 0x07
+	OpExtendVisibilityAck OpCode = 0x09
+	OpSchemaResponse      OpCode = 0x12
+	OpCallResponse        OpCode = 0x21
 )
 
 // Admin operations
 const (
-	OpSchemaList      OpCode = 0x30
-	OpSchemaListResp  OpCode = 0x31
-	OpQueueList       OpCode = 0x32
-	OpQueueListResp   OpCode = 0x33
+	OpSchemaList     OpCode = 0x30
+	OpSchemaListResp OpCode = 0x31
+	OpQueueList      OpCode = 0x32
+	OpQueueListResp  OpCode = 0x33
 )
 
 var opCodeNames = map[OpCode]string{
