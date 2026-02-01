@@ -29,7 +29,29 @@ Don't just add code to fix symptoms. Find root causes. Delete dead paths. Reuse 
 This ensures knowledge accumulates as branches merge to main. Location:
 - `docs/` for feature-specific docs (e.g., `docs/PERFORMANCE.md`)
 - `docs/plans/decisions-log.md` for architectural decisions
-- `docs/benchmarks/` for benchmark results and analysis
+- `docs/plans/YYYY-MM-DD-<topic>.md` for optimization loops and investigations
+
+## Optimization Loop Documentation
+
+**Every optimization loop must be documented with:**
+
+1. **Executive Summary** — What improved, by how much
+2. **Benchmark Progression** — Table showing before/after at each stage
+3. **For each finding:**
+   - Symptom (what we observed)
+   - Root cause (why it happened)
+   - Options considered (table with pros/cons/why not chosen)
+   - Fix implemented (code snippets)
+   - Result (measured improvement)
+   - Decision rationale
+   - Revisit triggers (when to reconsider this decision)
+4. **Alternative approaches not taken** — What we could have done differently
+5. **Lessons learned** — What we'd do differently next time
+6. **Raw data** — Actual benchmark output for reproducibility
+
+**Why document alternatives?** When debugging future issues, knowing what we *didn't* choose helps identify if we made the wrong call. If option B would have solved today's problem, we can revisit.
+
+**Example:** See `docs/plans/2026-02-01-optimization-loop-1.md`
 
 ## Key Design Decisions
 
@@ -78,13 +100,22 @@ docker run -p 9876:9876 qwer-q
 
 MVP complete. Broker runs in Docker with:
 - Protobuf wire protocol
-- BadgerDB persistence with configurable sync interval
-- Memory-based backpressure (300MB default limit)
-- Queue size limits (10K messages default)
+- BadgerDB persistence with configurable sync interval (`--sync-interval` flag)
+- Memory-based backpressure
+- Queue size limits (100K messages default)
+- Consumer prefetch buffer (100 messages)
 - Schema validation (JSON Schema)
 - CLI with publish/consume/admin commands
 
-**Known tradeoffs:** Default 100ms sync interval balances throughput (~3K/s) with durability (max 100ms data loss on power failure). Use `WithSyncInterval(0)` for sync-every-write mode.
+**Performance (512MB container, 1 CPU):**
+- ~5K msgs/sec with 1s sync interval
+- ~2K msgs/sec with 100ms sync interval
+- NATS comparison: 133K/s (but no persistence by default)
+
+**Known tradeoffs:**
+- Default 100ms sync: ~2K/s throughput, max 100ms data loss on crash
+- Benchmark 1s sync: ~5K/s throughput, max 1s data loss on crash
+- Use `--sync-interval=0` for sync-every-write (safest, slowest)
 
 ## What's Next
 
