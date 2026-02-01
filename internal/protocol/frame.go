@@ -5,22 +5,48 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 // MaxFrameSize is the maximum allowed frame size (16 MB).
 const MaxFrameSize = 16 * 1024 * 1024
 
+// DefaultMaxMessageSize is the default maximum message payload size (1 MB).
+// This matches NATS/Kafka defaults and is safe for 512MB containers.
+const DefaultMaxMessageSize uint32 = 1 * 1024 * 1024
+
+// maxMessageSize is the configured maximum message size (atomic for thread safety).
+// Use SetMaxMessageSize to change it.
+var maxMessageSize atomic.Uint32
+
+func init() {
+	maxMessageSize.Store(DefaultMaxMessageSize)
+}
+
+// SetMaxMessageSize configures the maximum allowed message payload size.
+// Messages larger than this are rejected before allocation (zero-cost).
+func SetMaxMessageSize(size uint32) {
+	maxMessageSize.Store(size)
+}
+
+// GetMaxMessageSize returns the current maximum message size.
+func GetMaxMessageSize() uint32 {
+	return maxMessageSize.Load()
+}
+
 var (
-	ErrFrameTooLarge = errors.New("frame exceeds maximum size")
-	ErrFrameTooSmall = errors.New("frame too small for header")
+	ErrFrameTooLarge   = errors.New("frame exceeds maximum size")
+	ErrMessageTooLarge = errors.New("message exceeds maximum size")
+	ErrFrameTooSmall   = errors.New("frame too small for header")
 )
 
 // Buffer pools for common frame sizes to reduce allocations.
 var (
-	smallBufPool = sync.Pool{New: func() any { return make([]byte, 1024) }}
-	medBufPool   = sync.Pool{New: func() any { return make([]byte, 16*1024) }}
-	largeBufPool = sync.Pool{New: func() any { return make([]byte, 64*1024) }}
-	lengthPool   = sync.Pool{New: func() any { return make([]byte, 4) }}
+	smallBufPool  = sync.Pool{New: func() any { return make([]byte, 1024) }}
+	medBufPool    = sync.Pool{New: func() any { return make([]byte, 16*1024) }}
+	largeBufPool  = sync.Pool{New: func() any { return make([]byte, 64*1024) }}
+	xlargeBufPool = sync.Pool{New: func() any { return make([]byte, 256*1024) }}
+	lengthPool    = sync.Pool{New: func() any { return make([]byte, 4) }}
 )
 
 func getBuffer(size int) []byte {
@@ -43,6 +69,12 @@ func getBuffer(size int) []byte {
 			return buf[:size]
 		}
 		largeBufPool.Put(buf)
+	case size <= 256*1024:
+		buf := xlargeBufPool.Get().([]byte)
+		if cap(buf) >= size {
+			return buf[:size]
+		}
+		xlargeBufPool.Put(buf)
 	}
 	return make([]byte, size)
 }
@@ -57,6 +89,8 @@ func PutBuffer(buf []byte) {
 		medBufPool.Put(buf[:size])
 	case size <= 64*1024:
 		largeBufPool.Put(buf[:size])
+	case size <= 256*1024:
+		xlargeBufPool.Put(buf[:size])
 	}
 }
 
@@ -100,6 +134,13 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 	}
 	if length < 2 {
 		return nil, ErrFrameTooSmall
+	}
+
+	// Pre-allocation size check: reject oversized messages before allocating buffer.
+	// Payload size = length - 2 (version + opcode headers)
+	payloadSize := length - 2
+	if payloadSize > GetMaxMessageSize() {
+		return nil, ErrMessageTooLarge
 	}
 
 	// Read rest of frame using pooled buffer
