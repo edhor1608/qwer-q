@@ -1,6 +1,67 @@
 # Benchmark Process
 
+## Optimization Cycle
+
+This is our primary workflow for continuous improvement.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    OPTIMIZATION LOOP                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. BENCHMARK                                                   │
+│     Run full suite against Kafka, NATS, Redis, NSQ              │
+│     └─► go run bench/cmd/stress/main.go --queues=all            │
+│                                                                 │
+│  2. FIND WEAKNESSES                                             │
+│     Document in docs/benchmarks/WEAKNESSES.md                   │
+│     └─► What failed? What was slower? What crashed?             │
+│                                                                 │
+│  3. REPRODUCE                                                   │
+│     Confirm it's real, not test flakiness or local issues       │
+│     └─► Run same test 3x. Different machines if possible.       │
+│                                                                 │
+│  4. CLASSIFY                                                    │
+│     Sort/cluster/weight/rate each weakness:                     │
+│     ├─► Expected: Trade-off of our approach (document, accept)  │
+│     ├─► Fixable: Real bug we can address                        │
+│     └─► Fundamental: Points against our vision (reconsider?)    │
+│                                                                 │
+│  5. FIX ONE WEAKNESS                                            │
+│     Pick highest-priority fixable weakness                      │
+│     └─► Small, focused fix. One thing at a time.                │
+│                                                                 │
+│  6. REGRESSION TEST                                             │
+│     Re-run benchmark to verify fix                              │
+│     ├─► Fixed? Mark resolved, go to step 6 (next weakness)      │
+│     └─► Not fixed? Back to step 5, try different approach       │
+│                                                                 │
+│  7. FRESH CYCLE                                                 │
+│     All weaknesses processed? Start over at step 1              │
+│     └─► New benchmarks may reveal new issues                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Weakness Classification Guide
+
+| Type | Description | Action |
+|------|-------------|--------|
+| **Expected** | Trade-off inherent to our design (e.g., sync writes slower than async) | Document in WEAKNESSES.md, explain why it's acceptable |
+| **Fixable** | Real bug or oversight we can address | Create branch, fix, regression test |
+| **Fundamental** | Challenges our core approach | Team discussion needed before proceeding |
+
+### Current Cycle Status
+
+Track in `docs/benchmarks/WEAKNESSES.md`:
+- Open weaknesses pending classification
+- In-progress fixes
+- Resolved weaknesses (with before/after metrics)
+
+---
+
 ## Goals
+
 1. Find weaknesses, not just good results
 2. Run all systems under identical conditions (Docker, same resources)
 3. Document findings before fixing
