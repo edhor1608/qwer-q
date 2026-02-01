@@ -3,9 +3,27 @@ package storage
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 )
+
+// DefaultSyncInterval is how often to fsync the write-ahead log.
+// 100ms provides good balance: ~10x throughput vs sync-every-write,
+// max 100ms data loss on crash. Similar to Redis appendfsync everysec.
+const DefaultSyncInterval = 100 * time.Millisecond
+
+// StorageOption configures BadgerStorage.
+type StorageOption func(*badgerConfig)
+
+type badgerConfig struct {
+	syncInterval time.Duration
+}
+
+// WithSyncInterval sets how often to fsync (0 = sync every write).
+func WithSyncInterval(d time.Duration) StorageOption {
+	return func(c *badgerConfig) { c.syncInterval = d }
+}
 
 const (
 	msgPrefix   = "msg:"
@@ -14,11 +32,21 @@ const (
 
 // BadgerStorage implements Storage using BadgerDB.
 type BadgerStorage struct {
-	db *badger.DB
+	db           *badger.DB
+	done         chan struct{}
+	syncInterval time.Duration
 }
 
 // NewBadgerStorage opens or creates a BadgerDB at the given path.
-func NewBadgerStorage(path string) (*BadgerStorage, error) {
+func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, error) {
+	cfg := &badgerConfig{syncInterval: DefaultSyncInterval}
+	for _, opt := range options {
+		opt(cfg)
+	}
+
+	// SyncWrites=true only if syncInterval is 0 (sync every write)
+	syncEveryWrite := cfg.syncInterval == 0
+
 	opts := badger.DefaultOptions(path).
 		WithLogger(nil).
 		// Memory optimization: reduce memtable count and size
@@ -30,16 +58,29 @@ func NewBadgerStorage(path string) (*BadgerStorage, error) {
 		WithBlockCacheSize(32 << 20).    // 32MB block cache (default: 256MB)
 		WithIndexCacheSize(16 << 20).    // 16MB index cache
 		WithCompression(0).              // No compression (CPU tradeoff)
-		WithSyncWrites(true).            // Sync writes for durability
+		WithSyncWrites(syncEveryWrite).  // Sync every write only if interval is 0
 		// Value log optimization: store small values in LSM tree
 		WithValueThreshold(1 << 10).     // Values < 1KB in LSM (faster reads)
 		WithNumCompactors(2).            // Fewer compactors to save resources (default: 4)
 		WithNumVersionsToKeep(1)         // Only keep latest version
+
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, err
 	}
-	return &BadgerStorage{db: db}, nil
+
+	s := &BadgerStorage{
+		db:           db,
+		done:         make(chan struct{}),
+		syncInterval: cfg.syncInterval,
+	}
+
+	// Start background sync if not syncing every write
+	if !syncEveryWrite {
+		go s.syncLoop()
+	}
+
+	return s, nil
 }
 
 // msgKey returns the storage key for a message.
@@ -153,7 +194,23 @@ func (s *BadgerStorage) LoadQueues() (map[string]QueueConfig, error) {
 	return queues, err
 }
 
-// Close closes the database.
+// syncLoop periodically fsyncs data to disk.
+func (s *BadgerStorage) syncLoop() {
+	ticker := time.NewTicker(s.syncInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.db.Sync()
+		case <-s.done:
+			return
+		}
+	}
+}
+
+// Close syncs data and closes the database.
 func (s *BadgerStorage) Close() error {
+	close(s.done)
+	s.db.Sync() // Final sync before close
 	return s.db.Close()
 }
