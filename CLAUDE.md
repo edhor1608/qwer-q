@@ -4,6 +4,18 @@
 
 A typed, docker-first message queue built in Go. Fills the gap between Kafka (too heavy) and NATS (too minimal).
 
+## Code Philosophy
+
+**Minimize code, maximize understanding.**
+
+Before writing code:
+1. **Question first** — Is new code needed? Can existing code be changed? Should wrong code be deleted?
+2. **Explain the why** — Verbose reasoning before any change. What problem does this solve?
+3. **Simple > clever** — Easy to read, easy to see the concepts. No magic.
+4. **One change, one purpose** — Small, focused changes that can be challenged and verified.
+
+Don't just add code to fix symptoms. Find root causes. Delete dead paths. Reuse what exists.
+
 ## Branch Knowledge Documentation
 
 **Each feature branch must document its knowledge.** When working on a branch, create/update markdown files capturing:
