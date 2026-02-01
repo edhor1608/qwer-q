@@ -49,9 +49,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	b := broker.NewBroker(opts...)
 	defer b.Close()
 
-	// Load persisted messages from storage
-	if err := b.LoadFromStorage(); err != nil {
-		return fmt.Errorf("failed to load from storage: %w", err)
+	// Load persisted messages from storage (only if storage is configured)
+	if dataDir != "" {
+		if err := b.LoadFromStorage(); err != nil {
+			return fmt.Errorf("failed to load from storage: %w", err)
+		}
 	}
 
 	srv := broker.NewServer(b)
