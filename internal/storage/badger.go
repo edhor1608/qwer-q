@@ -33,7 +33,7 @@ func NewBadgerStorage(path string) (*BadgerStorage, error) {
 		WithSyncWrites(true).            // Sync writes for durability
 		// Value log optimization: store small values in LSM tree
 		WithValueThreshold(1 << 10).     // Values < 1KB in LSM (faster reads)
-		WithNumCompactors(2).            // More compactors for faster GC
+		WithNumCompactors(2).            // Fewer compactors to save resources (default: 4)
 		WithNumVersionsToKeep(1)         // Only keep latest version
 	db, err := badger.Open(opts)
 	if err != nil {

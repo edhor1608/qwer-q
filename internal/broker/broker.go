@@ -67,8 +67,9 @@ func (b *Broker) CheckMemoryPressure() error {
 	}
 
 	// Only check every 10 calls to balance overhead vs responsiveness
+	// Use != 1 so first call triggers a check (count=1, 11, 21, ...)
 	count := b.memCheck.Add(1)
-	if count%10 != 0 {
+	if count%10 != 1 {
 		return nil
 	}
 
