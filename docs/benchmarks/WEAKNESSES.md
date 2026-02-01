@@ -217,7 +217,7 @@ will eventually OOM. This is expected - you can't store infinite data in finite 
 
 ---
 
-## Fixed Weaknesses
+## Previously Fixed Weaknesses (Loop 1)
 
 ### W-F001: BadgerDB Memory Configuration
 **Status:** Fixed
@@ -338,11 +338,6 @@ WithNumVersionsToKeep(1)      // Only keep latest
 - Schema validation (built-in)
 - Docker-first deployment
 - Lower complexity than Kafka
-
-### Where NATS Excels
-- Pure pub/sub throughput: 600K+/s
-- Low memory footprint: ~10-20MB
-- No persistence overhead
 
 ### QWER-Q Target Use Cases
 - At-least-once delivery requirement

@@ -353,4 +353,4 @@ The OOM fix is working correctly:
 |------|--------|
 | Branch | `fix/w008-large-message-oom` |
 | Commit | `fix(protocol): prevent OOM with large messages (W-008)` |
-| PR | https://github.com/edhor1608/qwer-q/pull/8 |
+| PR | [#8](https://github.com/edhor1608/qwer-q/pull/8) |

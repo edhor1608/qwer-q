@@ -98,6 +98,7 @@ Warning: Running without authentication - not for production
 }
 
 // parseSize parses a size string like "1MB", "512KB", "1024" into bytes.
+// Returns error for negative values or values exceeding uint32 max.
 func parseSize(s string) (int64, error) {
 	if s == "" {
 		return 0, fmt.Errorf("empty size")
@@ -111,6 +112,11 @@ func parseSize(s string) (int64, error) {
 		return 0, fmt.Errorf("invalid size format: %s", s)
 	}
 
+	// Reject negative values
+	if size < 0 {
+		return 0, fmt.Errorf("size cannot be negative: %s", s)
+	}
+
 	switch suffix {
 	case "", "B", "b":
 		// bytes, no change
@@ -122,6 +128,12 @@ func parseSize(s string) (int64, error) {
 		size *= 1024 * 1024 * 1024
 	default:
 		return 0, fmt.Errorf("unknown size suffix: %s", suffix)
+	}
+
+	// Check uint32 bounds (max ~4GB)
+	const maxUint32 = 1<<32 - 1
+	if size > maxUint32 {
+		return 0, fmt.Errorf("size exceeds maximum (4GB): %s", s)
 	}
 
 	return size, nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 // MaxFrameSize is the maximum allowed frame size (16 MB).
@@ -12,21 +13,25 @@ const MaxFrameSize = 16 * 1024 * 1024
 
 // DefaultMaxMessageSize is the default maximum message payload size (1 MB).
 // This matches NATS/Kafka defaults and is safe for 512MB containers.
-const DefaultMaxMessageSize = 1 * 1024 * 1024
+const DefaultMaxMessageSize uint32 = 1 * 1024 * 1024
 
-// maxMessageSize is the configured maximum message size.
+// maxMessageSize is the configured maximum message size (atomic for thread safety).
 // Use SetMaxMessageSize to change it.
-var maxMessageSize uint32 = DefaultMaxMessageSize
+var maxMessageSize atomic.Uint32
+
+func init() {
+	maxMessageSize.Store(DefaultMaxMessageSize)
+}
 
 // SetMaxMessageSize configures the maximum allowed message payload size.
 // Messages larger than this are rejected before allocation (zero-cost).
 func SetMaxMessageSize(size uint32) {
-	maxMessageSize = size
+	maxMessageSize.Store(size)
 }
 
 // GetMaxMessageSize returns the current maximum message size.
 func GetMaxMessageSize() uint32 {
-	return maxMessageSize
+	return maxMessageSize.Load()
 }
 
 var (
@@ -134,7 +139,7 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 	// Pre-allocation size check: reject oversized messages before allocating buffer.
 	// Payload size = length - 2 (version + opcode headers)
 	payloadSize := length - 2
-	if payloadSize > maxMessageSize {
+	if payloadSize > GetMaxMessageSize() {
 		return nil, ErrMessageTooLarge
 	}
 
