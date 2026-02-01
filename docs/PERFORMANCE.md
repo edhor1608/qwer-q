@@ -84,31 +84,41 @@ WithNumVersionsToKeep(1)      // Only keep latest
 
 **Result:** Idle memory 505MB → 14MB
 
-### 2. Memory Backpressure (W-007)
+### 2. Memory Backpressure (W-007, updated in W-009)
 
 **Problem:** Under extreme load, container OOMs without warning.
 
-**Fix:**
+**Initial Fix (Loop 1):** Throttled ReadMemStats every 10 calls.
+
+**Problem with Initial Fix (Loop 3):** ReadMemStats is stop-the-world - blocked all goroutines, causing consumer to stall.
+
+**Final Fix:**
 ```go
+// Background goroutine updates cached stats every 100ms
+func (b *Broker) memoryMonitor() {
+    ticker := time.NewTicker(100 * time.Millisecond)
+    for {
+        select {
+        case <-ticker.C:
+            var m runtime.MemStats
+            runtime.ReadMemStats(&m)
+            b.cachedAlloc.Store(m.Alloc)
+        case <-b.done:
+            return
+        }
+    }
+}
+
+// Hot path reads atomic cached value (no STW)
 func (b *Broker) CheckMemoryPressure() error {
-    if b.memoryLimit == 0 {
-        return nil
-    }
-    // Throttled check (every 10 calls)
-    count := b.memCheck.Add(1)
-    if count%10 != 0 {
-        return nil
-    }
-    var m runtime.MemStats
-    runtime.ReadMemStats(&m)
-    if m.Alloc > b.memoryLimit {
+    if b.cachedAlloc.Load() > b.memoryLimit {
         return ErrMemoryPressure
     }
     return nil
 }
 ```
 
-**Result:** Graceful rejection instead of OOM crash.
+**Result:** Graceful rejection without blocking goroutines.
 
 ### 3. Queue Size Limits
 
@@ -128,25 +138,62 @@ func (b *Broker) CheckMemoryPressure() error {
 
 **Fix:** 100K max keys, cleanup every 10 seconds.
 
+## Optimization History
+
+### Loop 1 (2026-02-01): Memory & Sync
+
+| Fix | Problem | Result |
+|-----|---------|--------|
+| Sync interval | fsync every write = 188/s | 100ms batching = 3K/s |
+| BadgerDB memtables | 5x64MB = 320MB | 2x32MB = 64MB |
+| Value threshold | Large value log overhead | Small values in LSM |
+| Idempotency limits | Unbounded key growth | 100K max, 10s cleanup |
+| Buffer pooling | Allocations per frame | sync.Pool reuse |
+| Memory backpressure | OOM without warning | Graceful rejection |
+
+### Loop 2 (2026-02-01): Large Messages (W-008)
+
+| Fix | Problem | Result |
+|-----|---------|--------|
+| Pre-allocation check | OOM on 256KB messages | Fail-fast before alloc |
+| Extended buffer pools | Only 64KB pools | Added 256KB pool |
+| Max message size CLI | No size configuration | `--max-message-size` flag |
+
+**Before:** 10/s → OOM crash | **After:** 84/s stable
+
+### Loop 3 (2026-02-01): ReadMemStats STW (W-009)
+
+| Fix | Problem | Result |
+|-----|---------|--------|
+| Cached memory stats | ReadMemStats STW every 10th publish | Background goroutine, 100ms update |
+| Memory limit | 300MB too aggressive | 400MB for BadgerDB baseline |
+
+**Before:** 460/s, consumer stops at 3.4K | **After:** 3.4K/s, consumer keeps up
+
+---
+
 ## Results
 
-### Before vs After
+### Cumulative Improvements
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Sustained throughput | 188/s | 3,000/s | **16x** |
-| Burst (1000 msgs) | 27s | 558ms | **49x** |
-| Idle memory | 505MB | 14MB | **36x less** |
-| Data overhead | 6x | 0.5x | **12x better** |
+| Metric | Initial | After Loop 1 | After Loop 3 | Total |
+|--------|---------|--------------|--------------|-------|
+| Throughput | 188/s | 1K/s | 3.4K/s | **18x** |
+| Consumer stalls | Yes | Yes | No | **Fixed** |
+| Burst (1K msgs) | 27s | 558ms | 450ms | **60x** |
+| Idle memory | 505MB | 14MB | 14MB | **36x less** |
+| 256KB messages | N/A | OOM crash | 84/s stable | **Fixed** |
 
-### vs Competitors (persisted messages)
+### Current Performance (as of Loop 3)
 
-| Queue | Throughput |
-|-------|------------|
-| QWER-Q | 1.1-3K/s |
-| Kafka | 673/s |
+| Queue | Sustained | Burst | Notes |
+|-------|-----------|-------|-------|
+| QWER-Q | 3.4K/s | 450ms/1K | Persistent, schema validation |
+| Kafka | 600/s | - | Persistent |
+| RabbitMQ | 4.9K/s | - | Persistent |
+| NATS | 800K/s | - | No persistence by default |
 
-**QWER-Q is now 1.6-4x faster than Kafka** for durable message queuing.
+**QWER-Q is now 5x faster than Kafka** for durable message queuing.
 
 ## Tradeoffs
 
