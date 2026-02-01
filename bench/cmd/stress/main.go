@@ -22,7 +22,7 @@ var (
 	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
 	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
 	queues          = flag.String("queues", "qwerq,nats,rabbitmq,redis,kafka,pulsar,redpanda", "Comma-separated list of queues to test")
-	tests           = flag.String("tests", "all", "Tests to run: all, sustained, concurrency, sizes, depth, burst, lag")
+	tests           = flag.String("tests", "all", "Tests to run: all, sustained, concurrency, sizes, depth, burst, lag, ordering, exactlyonce, backpressure")
 	duration        = flag.Duration("duration", 60*time.Second, "Duration for sustained tests")
 	messageSize     = flag.Int("message-size", 1024, "Message size in bytes")
 )
@@ -196,6 +196,66 @@ func main() {
 			results[adapter.Name()] = result
 		}
 		harness.PrintLagResults(results)
+	}
+
+	// 7. Ordering Test
+	if runAll || contains(testList, "ordering") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST 7: Ordering Guarantees (verify FIFO ordering)")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.OrderingResult)
+		for _, adapter := range adapterList {
+			fmt.Printf("Running %s...\n", adapter.Name())
+			result, err := scenarios.RunOrderingTest(ctx, adapter, 10000, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[adapter.Name()] = result
+		}
+		scenarios.PrintOrderingResults(results)
+	}
+
+	// 8. Exactly-Once Test
+	if runAll || contains(testList, "exactlyonce") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST 8: Exactly-Once Semantics (deduplication behavior)")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.ExactlyOnceResult)
+		for _, adapter := range adapterList {
+			fmt.Printf("Running %s...\n", adapter.Name())
+			result, err := scenarios.RunExactlyOnceTest(ctx, adapter, 1000, 3, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[adapter.Name()] = result
+		}
+		scenarios.PrintExactlyOnceResults(results)
+	}
+
+	// 9. Backpressure Test
+	if runAll || contains(testList, "backpressure") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST 9: Backpressure Behavior (slow consumer, fast producer)")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.BackpressureResult)
+		for _, adapter := range adapterList {
+			fmt.Printf("Running %s...\n", adapter.Name())
+			result, err := scenarios.RunBackpressureTest(ctx, adapter, 30*time.Second, 10*time.Millisecond)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[adapter.Name()] = result
+		}
+		scenarios.PrintBackpressureResults(results)
 	}
 
 	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

@@ -24,7 +24,7 @@ var (
 	pulsarURL       = flag.String("pulsar-url", "pulsar://localhost:6650", "Pulsar server URL")
 	redpandaBrokers = flag.String("redpanda-brokers", "localhost:9093", "RedPanda broker addresses")
 	queues          = flag.String("queues", "qwerq,nats,kafka,redis,pulsar,redpanda", "Comma-separated list of queues")
-	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery")
+	tests           = flag.String("tests", "all", "Tests: all, breaking, memory, connections, recovery, ordering, exactlyonce, backpressure")
 	skipDocker      = flag.Bool("skip-docker", false, "Skip Docker setup (assume containers running)")
 )
 
@@ -193,6 +193,69 @@ func main() {
 			results[name] = result
 		}
 		scenarios.PrintRecoveryResults(results)
+	}
+
+	// TEST 5: Ordering Guarantees
+	if runAll || contains(testList, "ordering") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Ordering Guarantees")
+		fmt.Println("Verify FIFO ordering with sequence numbers")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.OrderingResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunOrderingTest(ctx, adapter, 10000, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintOrderingResults(results)
+	}
+
+	// TEST 6: Exactly-Once Semantics
+	if runAll || contains(testList, "exactlyonce") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Exactly-Once Semantics")
+		fmt.Println("Test deduplication behavior with repeated message IDs")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.ExactlyOnceResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunExactlyOnceTest(ctx, adapter, 1000, 3, 30*time.Second)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintExactlyOnceResults(results)
+	}
+
+	// TEST 7: Backpressure Behavior
+	if runAll || contains(testList, "backpressure") {
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("TEST: Backpressure Behavior")
+		fmt.Println("Fast producer, slow consumer - observe system response")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		results := make(map[string]*scenarios.BackpressureResult)
+		for name, adapter := range adapterMap {
+			fmt.Printf("Testing %s...\n", name)
+			result, err := scenarios.RunBackpressureTest(ctx, adapter, 30*time.Second, 10*time.Millisecond)
+			if err != nil {
+				fmt.Printf("  ERROR: %v\n", err)
+				continue
+			}
+			results[name] = result
+		}
+		scenarios.PrintBackpressureResults(results)
 	}
 
 	// Print container resource usage summary
