@@ -14,3 +14,8 @@ linters:
 issues:
   exclude-dirs:
     - bench  # Benchmark code doesn't need strict linting
+  exclude-rules:
+    - path: internal/protocol/frame.go
+      linters:
+        - staticcheck
+      text: "SA6002"  # sync.Pool with slices is intentional for buffer pooling

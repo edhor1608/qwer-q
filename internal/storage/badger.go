@@ -59,19 +59,19 @@ func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, er
 	opts := badger.DefaultOptions(path).
 		WithLogger(nil).
 		// Memory optimization: reduce memtable count and size
-		WithNumMemtables(2).             // Default: 5 → 2 (saves ~192MB)
-		WithMemTableSize(32 << 20).      // Default: 64MB → 32MB
-		WithValueLogFileSize(64 << 20).  // Default: 1GB → 64MB
-		WithNumLevelZeroTables(2).       // Faster L0 compaction
-		WithNumLevelZeroTablesStall(4).  // Stall writes earlier
-		WithBlockCacheSize(32 << 20).    // 32MB block cache (default: 256MB)
-		WithIndexCacheSize(16 << 20).    // 16MB index cache
-		WithCompression(0).              // No compression (CPU tradeoff)
-		WithSyncWrites(syncEveryWrite).  // Sync every write only if interval is 0
+		WithNumMemtables(2).            // Default: 5 → 2 (saves ~192MB)
+		WithMemTableSize(32 << 20).     // Default: 64MB → 32MB
+		WithValueLogFileSize(64 << 20). // Default: 1GB → 64MB
+		WithNumLevelZeroTables(2).      // Faster L0 compaction
+		WithNumLevelZeroTablesStall(4). // Stall writes earlier
+		WithBlockCacheSize(32 << 20).   // 32MB block cache (default: 256MB)
+		WithIndexCacheSize(16 << 20).   // 16MB index cache
+		WithCompression(0).             // No compression (CPU tradeoff)
+		WithSyncWrites(syncEveryWrite). // Sync every write only if interval is 0
 		// Value log optimization: store small values in LSM tree
-		WithValueThreshold(1 << 10).     // Values < 1KB in LSM (faster reads)
-		WithNumCompactors(2).            // Fewer compactors to save resources (default: 4)
-		WithNumVersionsToKeep(1)         // Only keep latest version
+		WithValueThreshold(1 << 10). // Values < 1KB in LSM (faster reads)
+		WithNumCompactors(2).        // Fewer compactors to save resources (default: 4)
+		WithNumVersionsToKeep(1)     // Only keep latest version
 
 	db, err := badger.Open(opts)
 	if err != nil {
