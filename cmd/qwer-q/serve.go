@@ -23,6 +23,7 @@ func init() {
 	serveCmd.Flags().IntP("port", "p", 9876, "port to listen on")
 	serveCmd.Flags().Int("metrics-port", 9877, "metrics server port")
 	serveCmd.Flags().String("data-dir", "/data", "data directory for message persistence")
+	serveCmd.Flags().Duration("sync-interval", 100*time.Millisecond, "disk sync interval (0 = sync every write, higher = more throughput, less durability)")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -30,6 +31,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	port, _ := cmd.Flags().GetInt("port")
 	metricsPort, _ := cmd.Flags().GetInt("metrics-port")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
+	syncInterval, _ := cmd.Flags().GetDuration("sync-interval")
 	addr := fmt.Sprintf(":%d", port)
 	metricsAddr := fmt.Sprintf(":%d", metricsPort)
 
@@ -37,7 +39,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// Initialize persistent storage if data directory is specified
 	if dataDir != "" {
-		store, err := storage.NewBadgerStorage(dataDir)
+		store, err := storage.NewBadgerStorage(dataDir, storage.WithSyncInterval(syncInterval))
 		if err != nil {
 			return fmt.Errorf("failed to open storage: %w", err)
 		}
