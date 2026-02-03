@@ -14,51 +14,35 @@ This document tracks weaknesses found during benchmarking. Issues are documented
 
 ## Open Weaknesses
 
-### W-010: Out-of-Order Message Delivery
-**Status:** Open (Root Cause Identified)
-**Severity:** Medium
-**Found:** 2026-02-01
-
-**Description:**
-6-12% of messages delivered out of order when ACKs are processed concurrently.
-
-**Reproduction:**
-```bash
-make docker-restart
-go run bench/cmd/stress/main.go --queues=qwerq --tests=ordering --duration=30s
-```
-
-**Root Cause:**
-When consumer ACKs are processed in concurrent goroutines, they race for the queue mutex. `tryDeliver` is called from each ACK, and the order of mutex acquisition determines which message is delivered next - not the original queue order.
-
-Example race:
-1. Consumer reads msg0, msg1, msg2 rapidly
-2. Spawns ACK goroutines for each
-3. ACK-2 acquires mutex before ACK-1
-4. ACK-2's `tryDeliver` sends msg3
-5. ACK-1's `tryDeliver` sends msg4
-6. Consumer sees: msg0, msg1, msg2, msg3, msg4... but if ACK-1 ran first, it would be msg3
-
-**Test Results:**
-| Test | ACK Pattern | Out of Order |
-|------|-------------|--------------|
-| Queue FIFO (sync) | Sequential | 0% |
-| Queue FIFO (concurrent) | Parallel | 6-12% |
-| Server/Client | Parallel | 7%+ |
-
-**Impact:**
-- At-least-once delivery still works
-- FIFO ordering not guaranteed under concurrent ACKs
-- Affects high-throughput scenarios
-
-**Potential Fixes:**
-1. Use monotonic delivery counter (deliver in strict sequence)
-2. Single-threaded ACK processing
-3. Document as known limitation
+(None currently)
 
 ---
 
 ## Fixed Weaknesses
+
+### W-010: Out-of-Order Message Delivery
+**Status:** Fixed
+**Severity:** Medium
+**Found:** 2026-02-01
+**Fixed:** 2026-02-03
+
+**Description:**
+6-12% of messages delivered out of order when ACKs are processed concurrently.
+
+**Root Cause:**
+`tryDeliver` iterated through the entire queue and would skip invisible messages to deliver later ones first. When concurrent ACK goroutines called `tryDeliver`, the iteration could deliver messages out of their original enqueue order.
+
+**Fix:**
+Changed `tryDeliver` to strict FIFO - only deliver the HEAD of the queue (index 0). If head is not visible, stop entirely rather than skipping to later messages.
+
+**Results:**
+| Metric | Before | After |
+|--------|--------|-------|
+| Ordering (concurrent ACKs) | 88-94% | 100% |
+| Throughput | 2.9K/s | 3.7K/s |
+| Errors | 0 | 0 |
+
+---
 
 ### W-009: ReadMemStats Stop-the-World Blocks Consumer
 **Status:** Fixed

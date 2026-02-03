@@ -120,12 +120,14 @@ func (q *Queue) tryDeliver() {
 	}
 
 	now := time.Now()
-	for i := 0; i < len(q.messages); i++ {
-		msg := q.messages[i]
+	// STRICT FIFO: only deliver the head of the queue, then recurse for more
+	for len(q.messages) > 0 {
+		msg := q.messages[0]
 		if msg.VisibleAt.After(now) {
-			continue
+			return // Head not visible yet, maintain FIFO order
 		}
 
+		delivered := false
 		// Find a consumer with available channel capacity (round-robin)
 		for j := 0; j < len(q.consumers); j++ {
 			idx := (q.nextIdx + j) % len(q.consumers)
@@ -133,19 +135,22 @@ func (q *Queue) tryDeliver() {
 
 			select {
 			case c.Ch <- msg:
-				// Move to in-flight
-				q.messages = append(q.messages[:i], q.messages[i+1:]...)
-				i--
+				// Move to in-flight - use proper slice removal to free memory
+				copy(q.messages, q.messages[1:])
+				q.messages = q.messages[:len(q.messages)-1]
 				msg.Attempt++
 				msg.VisibleAt = now.Add(c.VisibilityTimeout)
 				q.inFlight[msg.ID] = msg
 				q.nextIdx = (idx + 1) % len(q.consumers)
-				goto nextMsg
+				delivered = true
+				break // Try next message
 			default:
 				// Channel full, try next consumer
 			}
 		}
-	nextMsg:
+		if !delivered {
+			return // All consumers full, stop trying
+		}
 	}
 }
 

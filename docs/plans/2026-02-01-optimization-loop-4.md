@@ -8,9 +8,9 @@
 
 ## Executive Summary
 
-Loop 4 benchmark revealed an ordering issue: **~1% of messages delivered out of order** even with a single consumer.
+Loop 4 benchmark revealed an ordering issue: **6-12% of messages delivered out of order** with concurrent ACKs.
 
-**Status:** Under investigation
+**Status:** ✅ Fixed
 
 ---
 
@@ -174,6 +174,53 @@ This explains why:
 | C. Strict ordering mode | Single-threaded delivery with lock | Performance penalty |
 
 **Recommendation:** Option A - The queue should maintain FIFO order regardless of ACK timing. This is a correctness bug, not a performance tradeoff.
+
+---
+
+## Step 6: Fix Implementation
+
+### The Fix
+
+Changed `tryDeliver` to use **strict FIFO delivery**:
+- Only deliver the HEAD of the queue (index 0)
+- If head is not visible, stop (don't skip to later messages)
+- Loop to deliver to multiple consumers if they have space
+- Use proper slice removal to free memory
+
+**Before (buggy):**
+```go
+for i := 0; i < len(q.messages); i++ {
+    msg := q.messages[i]
+    if msg.VisibleAt.After(now) {
+        continue  // Skip invisible, try next - CAUSES REORDERING
+    }
+    // ... deliver msg
+}
+```
+
+**After (fixed):**
+```go
+for len(q.messages) > 0 {
+    msg := q.messages[0]  // Only HEAD
+    if msg.VisibleAt.After(now) {
+        return  // Stop if head not visible - MAINTAINS FIFO
+    }
+    // ... deliver msg, remove from head, continue for more consumers
+}
+```
+
+### Verification
+
+**Unit tests:**
+- `TestQueueOrderingWithConcurrentAcks`: 0% out-of-order (was 6-12%)
+- `TestQueueOrderingSequentialAcks`: 0% out-of-order (baseline)
+
+**Benchmark (3 runs):**
+```
+| QWER-Q      |    10000 |    10000 |        0 |        0 |        0 |  100.0%  |
+```
+
+**Throughput:** 3.7K/s with 0 errors (no regression)
 
 ---
 
