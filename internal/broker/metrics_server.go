@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jonas/qwer-q/internal/dashboard"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -25,6 +26,7 @@ func NewMetricsServer(addr string) *MetricsServer {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", handleHealth)
+	mux.Handle("/dashboard/", http.StripPrefix("/dashboard", dashboard.Handler()))
 
 	return &MetricsServer{
 		server: &http.Server{
