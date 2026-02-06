@@ -119,3 +119,14 @@ message ExtendVisibilityRequest {
 message ExtendVisibilityResponse {
   int64 new_visible_at = 1;  // New visibility timestamp (Unix millis)
 }
+
+// AuthRequest is sent by client to authenticate.
+message AuthRequest {
+  string token = 1;
+}
+
+// AuthResponse confirms or rejects authentication.
+message AuthResponse {
+  bool success = 1;
+  string message = 2;
+}

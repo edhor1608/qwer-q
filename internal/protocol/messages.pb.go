@@ -1060,6 +1060,104 @@ func (x *ExtendVisibilityResponse) GetNewVisibleAt() int64 {
 	return 0
 }
 
+// AuthRequest is sent by client to authenticate.
+type AuthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthRequest) Reset() {
+	*x = AuthRequest{}
+	mi := &file_qwerq_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthRequest) ProtoMessage() {}
+
+func (x *AuthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_qwerq_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthRequest.ProtoReflect.Descriptor instead.
+func (*AuthRequest) Descriptor() ([]byte, []int) {
+	return file_qwerq_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AuthRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+// AuthResponse confirms or rejects authentication.
+type AuthResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthResponse) Reset() {
+	*x = AuthResponse{}
+	mi := &file_qwerq_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthResponse) ProtoMessage() {}
+
+func (x *AuthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_qwerq_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthResponse.ProtoReflect.Descriptor instead.
+func (*AuthResponse) Descriptor() ([]byte, []int) {
+	return file_qwerq_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AuthResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *AuthResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_qwerq_proto protoreflect.FileDescriptor
 
 const file_qwerq_proto_rawDesc = "" +
@@ -1150,7 +1248,12 @@ const file_qwerq_proto_rawDesc = "" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12+\n" +
 	"\x11extension_seconds\x18\x02 \x01(\rR\x10extensionSeconds\"@\n" +
 	"\x18ExtendVisibilityResponse\x12$\n" +
-	"\x0enew_visible_at\x18\x01 \x01(\x03R\fnewVisibleAtB+Z)github.com/jonas/qwer-q/internal/protocolb\x06proto3"
+	"\x0enew_visible_at\x18\x01 \x01(\x03R\fnewVisibleAt\"#\n" +
+	"\vAuthRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"B\n" +
+	"\fAuthResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessageB+Z)github.com/jonas/qwer-q/internal/protocolb\x06proto3"
 
 var (
 	file_qwerq_proto_rawDescOnce sync.Once
@@ -1164,7 +1267,7 @@ func file_qwerq_proto_rawDescGZIP() []byte {
 	return file_qwerq_proto_rawDescData
 }
 
-var file_qwerq_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_qwerq_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_qwerq_proto_goTypes = []any{
 	(*PublishRequest)(nil),           // 0: qwerq.PublishRequest
 	(*PublishResponse)(nil),          // 1: qwerq.PublishResponse
@@ -1185,16 +1288,18 @@ var file_qwerq_proto_goTypes = []any{
 	(*QueueListResponse)(nil),        // 16: qwerq.QueueListResponse
 	(*ExtendVisibilityRequest)(nil),  // 17: qwerq.ExtendVisibilityRequest
 	(*ExtendVisibilityResponse)(nil), // 18: qwerq.ExtendVisibilityResponse
-	nil,                              // 19: qwerq.PublishRequest.HeadersEntry
-	nil,                              // 20: qwerq.Message.HeadersEntry
-	nil,                              // 21: qwerq.CallRequest.HeadersEntry
-	nil,                              // 22: qwerq.CallResponse.HeadersEntry
+	(*AuthRequest)(nil),              // 19: qwerq.AuthRequest
+	(*AuthResponse)(nil),             // 20: qwerq.AuthResponse
+	nil,                              // 21: qwerq.PublishRequest.HeadersEntry
+	nil,                              // 22: qwerq.Message.HeadersEntry
+	nil,                              // 23: qwerq.CallRequest.HeadersEntry
+	nil,                              // 24: qwerq.CallResponse.HeadersEntry
 }
 var file_qwerq_proto_depIdxs = []int32{
-	19, // 0: qwerq.PublishRequest.headers:type_name -> qwerq.PublishRequest.HeadersEntry
-	20, // 1: qwerq.Message.headers:type_name -> qwerq.Message.HeadersEntry
-	21, // 2: qwerq.CallRequest.headers:type_name -> qwerq.CallRequest.HeadersEntry
-	22, // 3: qwerq.CallResponse.headers:type_name -> qwerq.CallResponse.HeadersEntry
+	21, // 0: qwerq.PublishRequest.headers:type_name -> qwerq.PublishRequest.HeadersEntry
+	22, // 1: qwerq.Message.headers:type_name -> qwerq.Message.HeadersEntry
+	23, // 2: qwerq.CallRequest.headers:type_name -> qwerq.CallRequest.HeadersEntry
+	24, // 3: qwerq.CallResponse.headers:type_name -> qwerq.CallResponse.HeadersEntry
 	12, // 4: qwerq.SchemaListResponse.schemas:type_name -> qwerq.SchemaInfo
 	15, // 5: qwerq.QueueListResponse.queues:type_name -> qwerq.QueueInfo
 	6,  // [6:6] is the sub-list for method output_type
@@ -1216,7 +1321,7 @@ func file_qwerq_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_qwerq_proto_rawDesc), len(file_qwerq_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
