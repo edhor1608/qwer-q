@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jonas/qwer-q/internal/api"
 	"github.com/jonas/qwer-q/internal/broker"
 	"github.com/jonas/qwer-q/internal/protocol"
 	"github.com/jonas/qwer-q/internal/storage"
@@ -66,6 +67,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	srv := broker.NewServer(b)
 	metricsSrv := broker.NewMetricsServer(metricsAddr)
+
+	// Register REST API on the same HTTP server as metrics
+	apiHandler := api.New(b, srv.Registry())
+	apiHandler.Register(metricsSrv.Mux())
 
 	// Graceful shutdown
 	sigCh := make(chan os.Signal, 1)
