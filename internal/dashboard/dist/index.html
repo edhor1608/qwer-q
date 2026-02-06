@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qwer-q</title>
+<style>
+:root {
+  --bg-root:#0d0d0d;--bg-surface:#141414;--bg-elevated:#1c1c1c;--bg-hover:#242424;--bg-active:#2c2c2c;--bg-input:#181818;
+  --border-subtle:#222;--border-default:#2e2e2e;--border-strong:#3d3d3d;
+  --text-primary:#e8e8e8;--text-secondary:#999;--text-tertiary:#666;--text-inverse:#0d0d0d;
+  --amber-400:#f5a623;--amber-500:#e6941a;--amber-900:#3d2608;
+  --status-healthy:#3dd68c;--status-healthy-muted:#1a3d2a;--status-warning:#f5a623;--status-warning-muted:#3d2e0a;
+  --status-critical:#ef4444;--status-critical-muted:#3d1414;--status-inactive:#555;--status-inactive-muted:#1e1e1e;
+  --chart-1:#f5a623;--chart-2:#3dd68c;
+  --syntax-string:#3dd68c;--syntax-number:#f5a623;--syntax-keyword:#c084fc;--syntax-key:#6e9ef5;--syntax-boolean:#f97066;--syntax-bracket:#999;
+  --font-mono:"Berkeley Mono","JetBrains Mono","Fira Code","SF Mono",ui-monospace,monospace;
+  --font-sans:"Inter","SF Pro",-apple-system,system-ui,sans-serif;
+  --text-2xs:.625rem;--text-xs:.6875rem;--text-sm:.75rem;--text-base:.8125rem;--text-md:.875rem;--text-lg:1rem;--text-xl:1.25rem;--text-2xl:1.5rem;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+  --sidebar-width:220px;--sidebar-collapsed:48px;--header-height:48px;
+  --radius-sm:3px;--radius-md:6px;--radius-lg:8px;--radius-full:9999px;
+  --shadow-md:0 4px 12px rgba(0,0,0,.4);
+  --ease-out:cubic-bezier(.16,1,.3,1);--ease-in:cubic-bezier(.7,0,.84,0);
+  --duration-fast:120ms;--duration-normal:200ms;
+}
+@media (prefers-reduced-motion:reduce) { :root{--duration-fast:0ms;--duration-normal:0ms} }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-root);
+  overflow: hidden;
+  height: 100vh;
+}
+a { color: var(--amber-400); text-decoration: none; }
+a:hover { color: var(--amber-500); }
+button {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+}
+input {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  outline: none;
+}
+input:focus { border-color: var(--amber-400); }
+code, .mono { font-family: var(--font-mono); }
+
+/* ===== Layout ===== */
+#app { display: flex; height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width var(--duration-normal) var(--ease-out);
+  overflow: hidden;
+}
+.sidebar.collapsed { width: var(--sidebar-collapsed); }
+.sidebar-logo {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.sidebar-logo .dot {
+  width: 8px; height: 8px;
+  background: var(--amber-400);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.sidebar-logo span {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+.sidebar.collapsed .sidebar-logo span { display: none; }
+.sidebar-nav { flex: 1; padding: var(--space-2) 0; overflow-y: auto; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  white-space: nowrap;
+  border-left: 2px solid transparent;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-item.active {
+  color: var(--text-primary);
+  background: var(--amber-900);
+  border-left-color: var(--amber-400);
+}
+.nav-item.active .nav-icon { color: var(--amber-400); }
+.nav-icon { width: 16px; height: 16px; flex-shrink: 0; color: inherit; }
+.nav-label { overflow: hidden; }
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .nav-count { display: none; }
+.nav-count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+.sidebar-toggle {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.sidebar-toggle:hover { color: var(--text-secondary); }
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Header */
+.header {
+  height: var(--header-height);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.breadcrumbs a { color: var(--text-secondary); }
+.breadcrumbs a:hover { color: var(--text-primary); }
+.breadcrumbs .sep { color: var(--text-tertiary); }
+.breadcrumbs .current { color: var(--text-primary); font-weight: 500; }
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.conn-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.conn-dot {
+  width: 6px; height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--status-inactive);
+}
+.conn-dot.live { background: var(--status-healthy); }
+.conn-dot.reconnecting { background: var(--status-warning); }
+.conn-dot.disconnected { background: var(--status-critical); }
+.uptime-display {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* Content */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+/* ===== Components ===== */
+
+/* Metric Card */
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  cursor: pointer;
+  transition: border-color var(--duration-fast);
+}
+.metric-card:hover { border-color: var(--border-default); }
+.metric-card.warning { border-bottom: 2px solid var(--status-warning); }
+.metric-card.critical { border-bottom: 2px solid var(--status-critical); }
+.metric-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+}
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.metric-unit {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-left: var(--space-1);
+}
+.metric-sub {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.badge-dot {
+  width: 6px; height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.badge.healthy { background: var(--status-healthy-muted); color: var(--status-healthy); }
+.badge.healthy .badge-dot { background: var(--status-healthy); }
+.badge.warning { background: var(--status-warning-muted); color: var(--status-warning); }
+.badge.warning .badge-dot { background: var(--status-warning); }
+.badge.critical { background: var(--status-critical-muted); color: var(--status-critical); }
+.badge.critical .badge-dot { background: var(--status-critical); }
+.badge.inactive { background: var(--status-inactive-muted); color: var(--status-inactive); }
+.badge.inactive .badge-dot { background: var(--status-inactive); }
+
+/* Table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+.data-table th {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+  user-select: none;
+  white-space: nowrap;
+}
+.data-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.data-table tr:hover td { background: var(--bg-hover); }
+.data-table .queue-name {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--amber-400);
+  cursor: pointer;
+}
+.data-table .queue-name:hover { text-decoration: underline; }
+.data-table .num { font-family: var(--font-mono); text-align: right; }
+
+/* Depth bar */
+.depth-bar {
+  width: 80px;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: var(--space-2);
+}
+.depth-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--amber-400);
+  transition: width var(--duration-normal);
+}
+.depth-bar-fill.high { background: var(--status-warning); }
+.depth-bar-fill.critical { background: var(--status-critical); }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-4);
+}
+.tab {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--duration-fast), border-color var(--duration-fast);
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active {
+  color: var(--amber-400);
+  border-bottom-color: var(--amber-400);
+}
+.tab .tab-badge {
+  background: var(--status-critical-muted);
+  color: var(--status-critical);
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: var(--space-1);
+  font-family: var(--font-mono);
+}
+
+/* Section */
+.section-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+.section-sub {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+/* Card list */
+.card-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  cursor: pointer;
+  transition: border-color var(--duration-fast);
+}
+.card:hover { border-color: var(--border-default); }
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.card-title {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.card-stats {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+.card-stats .stat-label { color: var(--text-tertiary); margin-right: var(--space-1); }
+.card-stats .stat-value { font-family: var(--font-mono); color: var(--text-primary); }
+.card.dlq {
+  margin-left: var(--space-6);
+  border-left: 2px solid var(--status-critical-muted);
+  opacity: 0.8;
+}
+.card.dlq .card-title { color: var(--text-secondary); }
+
+/* Stat row */
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.stat-item-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.stat-item-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+/* Chart */
+.chart-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+.chart-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.chart-area {
+  height: 120px;
+  position: relative;
+  overflow: hidden;
+}
+.chart-area svg { width: 100%; height: 100%; }
+.chart-area .line { fill: none; stroke-width: 1.5; }
+.chart-area .area { opacity: 0.15; }
+.chart-area .grid-line { stroke: var(--border-subtle); stroke-dasharray: 2 4; }
+
+/* Code block */
+.code-block {
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  overflow: auto;
+  max-height: 400px;
+  white-space: pre;
+  tab-size: 2;
+}
+.json-key { color: var(--syntax-key); }
+.json-str { color: var(--syntax-string); }
+.json-num { color: var(--syntax-number); }
+.json-bool { color: var(--syntax-boolean); }
+.json-br { color: var(--syntax-bracket); }
+.proto-kw { color: var(--syntax-keyword); }
+
+/* Consumer row */
+.consumer-group { margin-bottom: var(--space-5); }
+.consumer-group-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.consumer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+.consumer-row:hover { background: var(--bg-hover); }
+.consumer-dot {
+  width: 8px; height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.consumer-dot.active { background: var(--status-healthy); }
+.consumer-dot.idle { background: var(--status-warning); }
+.consumer-name { font-family: var(--font-mono); min-width: 140px; }
+.consumer-stats {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.consumer-duration {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* Settings */
+.settings-section { margin-bottom: var(--space-6); }
+.settings-section h3 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-3);
+}
+.settings-row {
+  display: flex;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+.settings-key {
+  color: var(--text-secondary);
+  width: 200px;
+  flex-shrink: 0;
+}
+.settings-value {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  color: var(--text-secondary);
+}
+.empty-state p { margin-bottom: var(--space-3); }
+.empty-state .code-block {
+  text-align: left;
+  display: inline-block;
+  max-width: 600px;
+}
+
+/* Dialog */
+.dialog-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.dialog {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  width: 400px;
+  max-width: 90vw;
+}
+.dialog h3 { font-size: var(--text-lg); margin-bottom: var(--space-3); }
+.dialog p { font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-4); }
+.dialog input { width: 100%; margin-bottom: var(--space-4); }
+.dialog-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+.btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: background var(--duration-fast);
+}
+.btn-default { background: var(--bg-hover); border: 1px solid var(--border-default); }
+.btn-default:hover { background: var(--bg-active); }
+.btn-danger { background: var(--status-critical); color: white; }
+.btn-danger:hover { background: #dc2626; }
+.btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--amber-400); color: var(--text-inverse); }
+.btn-primary:hover { background: var(--amber-500); }
+
+/* Toast */
+.toast-container {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-2);
+  z-index: 2000;
+}
+.toast {
+  width: 360px;
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  border-left: 3px solid var(--amber-400);
+  font-size: var(--text-sm);
+  animation: toastIn var(--duration-normal) var(--ease-out);
+}
+.toast.error { border-left-color: var(--status-critical); }
+.toast.success { border-left-color: var(--status-healthy); }
+@keyframes toastIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Help overlay */
+.help-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+.help-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.help-panel h3 { font-size: var(--text-lg); margin-bottom: var(--space-4); }
+.help-panel table { width: 100%; font-size: var(--text-sm); }
+.help-panel td { padding: var(--space-1) var(--space-2); }
+.help-panel td:first-child {
+  font-family: var(--font-mono);
+  color: var(--amber-400);
+  width: 80px;
+}
+.help-panel .section-label {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-top: var(--space-3);
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.search-input { width: 200px; }
+
+/* Message panel */
+.msg-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
+.msg-meta {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.msg-meta-key {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+.msg-meta-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.msg-payload { padding: var(--space-3); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .metric-cards { grid-template-columns: repeat(2, 1fr); }
+  .content { padding: var(--space-3); }
+  .search-input { width: 120px; }
+  .card-stats { flex-direction: column; gap: var(--space-1); }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="dot"></div>
+      <span>qwer-q</span>
+    </div>
+    <div class="sidebar-nav" id="sidebar-nav"></div>
+    <div class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3L5 8L10 13"/></svg>
+    </div>
+  </nav>
+  <div class="main">
+    <header class="header" id="header"></header>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+<div class="toast-container" id="toasts"></div>
+
+<script>
+(function() {
+"use strict";
+
+// ===== State =====
+var S = {
+  queues: [],
+  consumers: [],
+  schemas: [],
+  stats: {},
+  ws: null,
+  wsStatus: "disconnected",
+  pollTimer: null,
+  sidebarCollapsed: false,
+  sparkData: {}
+};
+
+// ===== Helpers =====
+function esc(s) {
+  var d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+function enc(s) { return encodeURIComponent(s); }
+
+function fmtNum(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return String(n);
+}
+function fmtRate(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return n.toFixed(0);
+}
+function fmtBytes(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB";
+  if (b >= 1048576) return (b / 1048576).toFixed(0) + " MB";
+  if (b >= 1024) return (b / 1024).toFixed(0) + " KB";
+  return b + " B";
+}
+function formatUptime(seconds) {
+  if (!seconds) return "";
+  var d = Math.floor(seconds / 86400);
+  var h = Math.floor((seconds % 86400) / 3600);
+  var m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return d + "d " + h + "h " + m + "m";
+  if (h > 0) return h + "h " + m + "m";
+  return m + "m";
+}
+function relTime(ts) {
+  if (!ts) return "--";
+  var diff = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (diff < 0) return "just now";
+  if (diff < 60) return Math.floor(diff) + "s ago";
+  if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+  return Math.floor(diff / 86400) + "d ago";
+}
+function queueSeverity(q) {
+  if ((q.name || "").endsWith(".dlq") && (q.depth || 0) > 0) return 2;
+  var cons = q.consumer_count || q.consumers || 0;
+  if (cons === 0 && (q.depth || 0) > 0) return 2;
+  if (q.max_size && (q.depth || 0) > q.max_size * 0.8) return 2;
+  if (q.max_size && (q.depth || 0) > q.max_size * 0.5) return 1;
+  if ((q.pub_rate || 0) > 0 && (q.con_rate || 0) === 0 && cons > 0) return 1;
+  return 0;
+}
+function countWarnings() {
+  return S.queues.filter(function(q) { return queueSeverity(q) > 0; }).length;
+}
+
+// ===== DOM Helpers =====
+function el(id) { return document.getElementById(id); }
+function setHTML(node, html) { node.innerHTML = html; }
+
+// ===== API =====
+var API_BASE = (location.pathname.replace(/\/+$/, "") || "") + "/api/v1";
+
+function api(path) {
+  return fetch(API_BASE + path).then(function(r) {
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }).catch(function(e) {
+    console.warn("API error:", path, e);
+    return null;
+  });
+}
+function apiPost(path, body) {
+  return fetch(API_BASE + path, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(r) {
+    if (!r.ok) throw new Error(r.status);
+    return r.json().catch(function() { return {}; });
+  }).catch(function(e) {
+    console.warn("API error:", path, e);
+    return null;
+  });
+}
+function apiDelete(path) {
+  return fetch(API_BASE + path, { method: "DELETE" }).then(function(r) {
+    if (!r.ok) throw new Error(r.status);
+    return r.json().catch(function() { return {}; });
+  }).catch(function(e) {
+    console.warn("API error:", path, e);
+    return null;
+  });
+}
+
+// ===== Data Fetching =====
+function fetchAll() {
+  return Promise.all([
+    api("/queues"),
+    api("/stats"),
+    api("/consumers"),
+    api("/schemas")
+  ]).then(function(results) {
+    var queues = results[0], stats = results[1], consumers = results[2], schemas = results[3];
+    if (queues) S.queues = Array.isArray(queues) ? queues : (queues.queues || []);
+    if (stats) S.stats = stats;
+    if (consumers) S.consumers = Array.isArray(consumers) ? consumers : (consumers.consumers || []);
+    if (schemas) S.schemas = Array.isArray(schemas) ? schemas : (schemas.schemas || []);
+
+    var now = Date.now();
+    S.queues.forEach(function(q) {
+      if (!S.sparkData[q.name]) S.sparkData[q.name] = [];
+      S.sparkData[q.name].push({ t: now, depth: q.depth || 0, pubRate: q.pub_rate || 0, conRate: q.con_rate || 0 });
+      if (S.sparkData[q.name].length > 300) S.sparkData[q.name].shift();
+    });
+    updateNav();
+  });
+}
+
+// ===== WebSocket =====
+function connectWS() {
+  var proto = location.protocol === "https:" ? "wss:" : "ws:";
+  var url = proto + "//" + location.host + API_BASE + "/ws";
+  try {
+    S.ws = new WebSocket(url);
+    S.ws.onopen = function() { S.wsStatus = "live"; updateConnDot(); };
+    S.ws.onclose = function() { S.wsStatus = "disconnected"; updateConnDot(); setTimeout(connectWS, 3000); };
+    S.ws.onerror = function() { S.wsStatus = "disconnected"; updateConnDot(); };
+    S.ws.onmessage = function(e) {
+      try { handleWSMessage(JSON.parse(e.data)); } catch(ex) {}
+    };
+  } catch(ex) { setTimeout(connectWS, 5000); }
+}
+
+function handleWSMessage(msg) {
+  if (msg.type === "queue_stats" && msg.data) {
+    Object.keys(msg.data).forEach(function(name) {
+      var data = msg.data[name];
+      var q = S.queues.find(function(q) { return q.name === name; });
+      if (q) Object.assign(q, data);
+      if (!S.sparkData[name]) S.sparkData[name] = [];
+      S.sparkData[name].push({ t: Date.now(), depth: data.depth || 0, pubRate: data.pub_rate || 0, conRate: data.con_rate || 0 });
+      if (S.sparkData[name].length > 300) S.sparkData[name].shift();
+    });
+    renderCurrent();
+  }
+  if (msg.type === "system_stats" && msg.data) {
+    Object.assign(S.stats, msg.data);
+    renderCurrent();
+  }
+  if (msg.type === "consumer_change") {
+    fetchAll().then(renderCurrent);
+  }
+}
+
+function updateConnDot() {
+  var dot = document.querySelector(".conn-dot");
+  if (dot) dot.className = "conn-dot " + S.wsStatus;
+}
+
+// ===== Router =====
+function getRoute() {
+  var hash = location.hash.slice(1) || "/";
+  var parts = hash.split("?");
+  var path = parts[0];
+  var params = new URLSearchParams(parts[1] || "");
+  return { path: path, params: params };
+}
+
+window.navigate = function(path) { location.hash = path; };
+
+function renderCurrent() {
+  var r = getRoute();
+  route(r.path, r.params);
+}
+
+function route(path, params) {
+  var content = el("content");
+  if (path === "/" || path === "") return renderOverview(content);
+  if (path === "/queues") return renderQueuesList(content);
+  var queueMatch = path.match(/^\/queues\/([^/]+)$/);
+  if (queueMatch) return renderQueueDetail(content, decodeURIComponent(queueMatch[1]), params);
+  var msgMatch = path.match(/^\/queues\/([^/]+)\/messages\/(.+)$/);
+  if (msgMatch) return renderMessageInspector(content, decodeURIComponent(msgMatch[1]), decodeURIComponent(msgMatch[2]));
+  if (path === "/consumers") return renderConsumers(content);
+  if (path === "/schemas") return renderSchemas(content);
+  var schemaMatch = path.match(/^\/schemas\/([^/]+)$/);
+  if (schemaMatch) return renderSchemaDetail(content, decodeURIComponent(schemaMatch[1]));
+  if (path === "/settings") return renderSettings(content);
+  renderOverview(content);
+}
+
+// ===== Navigation =====
+var NAV_ITEMS = [
+  { path: "/", icon: "overview", label: "Overview" },
+  { path: "/queues", icon: "queues", label: "Queues", countKey: "queues" },
+  { path: "/consumers", icon: "consumers", label: "Consumers", countKey: "consumers" },
+  { path: "/schemas", icon: "schemas", label: "Schemas", countKey: "schemas" },
+  { path: "/settings", icon: "settings", label: "Settings" }
+];
+
+var ICONS = {
+  overview: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>',
+  queues: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>',
+  consumers: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>',
+  schemas: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2v12M12 2v12M4 5h8M4 8h8M4 11h8"/></svg>',
+  settings: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2M3.8 3.8l1.4 1.4M10.8 10.8l1.4 1.4M3.8 12.2l1.4-1.4M10.8 5.2l1.4-1.4"/></svg>'
+};
+
+function updateNav() {
+  var nav = el("sidebar-nav");
+  var r = getRoute();
+  var activePath = r.path === "" ? "/" : r.path.startsWith("/queues/") ? "/queues" :
+    r.path.startsWith("/schemas/") ? "/schemas" : r.path;
+
+  setHTML(nav, NAV_ITEMS.map(function(item) {
+    var count = item.countKey ? S[item.countKey].length : "";
+    var isActive = item.path === activePath;
+    return '<div class="nav-item' + (isActive ? " active" : "") + '" onclick="navigate(\'' + item.path + '\')">' +
+      '<div class="nav-icon">' + ICONS[item.icon] + '</div>' +
+      '<span class="nav-label">' + item.label + '</span>' +
+      (count !== "" ? '<span class="nav-count">' + count + '</span>' : "") +
+    '</div>';
+  }).join(""));
+}
+
+// ===== Header =====
+function renderHeader(breadcrumbs) {
+  var header = el("header");
+  var bc = breadcrumbs || [];
+  var uptime = formatUptime(S.stats.uptime_seconds || S.stats.uptime || 0);
+  setHTML(header,
+    '<div class="breadcrumbs">' +
+      bc.map(function(b, i) {
+        if (i === bc.length - 1) return '<span class="current">' + esc(b.label) + '</span>';
+        return '<a href="#' + b.path + '">' + esc(b.label) + '</a><span class="sep">/</span>';
+      }).join("") +
+    '</div>' +
+    '<div class="header-right">' +
+      '<div class="conn-status">' +
+        '<div class="conn-dot ' + S.wsStatus + '"></div>' +
+        '<span>' + (S.wsStatus === "live" ? "Live" : S.wsStatus === "reconnecting" ? "Reconnecting" : "Offline") + '</span>' +
+      '</div>' +
+      (uptime ? '<span class="uptime-display">' + uptime + '</span>' : "") +
+    '</div>'
+  );
+}
+
+// ===== SVG Charts =====
+function renderSVGChart(data, keys, colors, fill) {
+  if (data.length < 2) return "<svg></svg>";
+  var w = 600, h = 100, pad = 4;
+  var allVals = [];
+  keys.forEach(function(k) { data.forEach(function(d) { allVals.push(d[k] || 0); }); });
+  var maxVal = Math.max(1, Math.max.apply(null, allVals));
+
+  var gridLines = [0.25, 0.5, 0.75].map(function(pct) {
+    var y = h - pad - pct * (h - 2 * pad);
+    return '<line x1="' + pad + '" y1="' + y + '" x2="' + (w - pad) + '" y2="' + y + '" class="grid-line"/>';
+  }).join("");
+
+  var lines = keys.map(function(key, ki) {
+    var points = data.map(function(d, i) {
+      var x = pad + (i / (data.length - 1)) * (w - 2 * pad);
+      var y = h - pad - ((d[key] || 0) / maxVal) * (h - 2 * pad);
+      return x + "," + y;
+    });
+    var pathD = "M" + points.join("L");
+    var areaStr = "";
+    if (fill && ki === 0) {
+      areaStr = '<path d="' + pathD + "L" + (w - pad) + "," + (h - pad) + "L" + pad + "," + (h - pad) + 'Z" fill="' + colors[ki] + '" class="area"/>';
+    }
+    return areaStr + '<path d="' + pathD + '" stroke="' + colors[ki] + '" class="line"/>';
+  }).join("");
+
+  return '<svg viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none">' + gridLines + lines + '</svg>';
+}
+
+// ===== Syntax Highlighting =====
+function highlightJSON(str) {
+  var s = str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s = s.replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g, '<span class="json-key">"$1"</span>:');
+  s = s.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, '<span class="json-str">"$1"</span>');
+  s = s.replace(/\b(\d+\.?\d*)\b/g, '<span class="json-num">$1</span>');
+  s = s.replace(/\b(true|false|null)\b/g, '<span class="json-bool">$1</span>');
+  s = s.replace(/([{}[\]])/g, '<span class="json-br">$1</span>');
+  return s;
+}
+
+function highlightProto(str) {
+  var s = str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s = s.replace(/\b(message|service|rpc|returns|enum|repeated|optional|required|import|syntax|package|option|oneof|map|reserved)\b/g, '<span class="proto-kw">$1</span>');
+  s = s.replace(/\b(string|int32|int64|uint32|uint64|bool|bytes|double|float|fixed32|fixed64|sfixed32|sfixed64|sint32|sint64)\b/g, '<span class="proto-kw">$1</span>');
+  s = s.replace(/= (\d+)/g, '= <span class="json-num">$1</span>');
+  s = s.replace(/"([^"]*)"/g, '<span class="json-str">"$1"</span>');
+  s = s.replace(/([{}[\];])/g, '<span class="json-br">$1</span>');
+  return s;
+}
+
+// ===== Empty States =====
+function renderEmptyQueues() {
+  return '<div class="empty-state">' +
+    '<p>No queues yet.</p>' +
+    '<p style="font-size:var(--text-xs);color:var(--text-tertiary)">Register a schema and publish your first message:</p>' +
+    '<div class="code-block" style="margin-top:var(--space-2)">qwer-q schema register --queue orders --proto ./order.proto --type myapp.Order\nqwer-q publish orders \'{"order_id": "1"}\'</div>' +
+  '</div>';
+}
+
+// ===== Toast =====
+function toast(msg, type) {
+  var t = document.createElement("div");
+  t.className = "toast " + (type || "");
+  t.textContent = msg;
+  el("toasts").appendChild(t);
+  setTimeout(function() { t.style.opacity = "0"; setTimeout(function() { t.remove(); }, 200); }, type === "error" ? 8000 : 5000);
+}
+window.toast = toast;
+
+// ===== Screens =====
+
+// 1. Overview
+function renderOverview(content) {
+  renderHeader([{ label: "Overview", path: "/" }]);
+  var totalQueues = S.queues.length;
+  var totalConsumers = S.consumers.length;
+  var memUsed = S.stats.memory_used || S.stats.mem_used || 0;
+  var memLimit = S.stats.memory_limit || S.stats.mem_limit || 1;
+  var memPct = memLimit > 0 ? Math.round((memUsed / memLimit) * 100) : 0;
+  var totalPub = 0, totalCon = 0;
+  S.queues.forEach(function(q) { totalPub += (q.pub_rate || 0); totalCon += (q.con_rate || 0); });
+
+  var sorted = S.queues.slice().sort(function(a, b) {
+    var sa = queueSeverity(a), sb = queueSeverity(b);
+    if (sa !== sb) return sb - sa;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  var warnings = countWarnings();
+  var memClass = memPct > 90 ? "critical" : memPct > 80 ? "warning" : "";
+  var depthBarClass = memPct > 90 ? "critical" : memPct > 80 ? "high" : "";
+
+  var html = '<div class="metric-cards">' +
+    '<div class="metric-card" onclick="navigate(\'/queues\')">' +
+      '<div class="metric-label">Queues</div>' +
+      '<div class="metric-value">' + totalQueues + '</div>' +
+      (warnings > 0 ? '<div class="metric-sub" style="color:var(--status-warning)">' + warnings + ' warning</div>' : '<div class="metric-sub">All healthy</div>') +
+    '</div>' +
+    '<div class="metric-card">' +
+      '<div class="metric-label">Throughput</div>' +
+      '<div class="metric-value">' + fmtRate(totalPub) + '<span class="metric-unit">msg/s</span></div>' +
+      '<div class="metric-sub">pub ' + fmtRate(totalPub) + ' / con ' + fmtRate(totalCon) + '</div>' +
+    '</div>' +
+    '<div class="metric-card" onclick="navigate(\'/consumers\')">' +
+      '<div class="metric-label">Consumers</div>' +
+      '<div class="metric-value">' + totalConsumers + '</div>' +
+      '<div class="metric-sub">&nbsp;</div>' +
+    '</div>' +
+    '<div class="metric-card ' + memClass + '">' +
+      '<div class="metric-label">Memory</div>' +
+      '<div class="metric-value">' + fmtBytes(memUsed) + '<span class="metric-unit">/ ' + fmtBytes(memLimit) + '</span></div>' +
+      '<div class="metric-sub"><div class="depth-bar" style="width:100px"><div class="depth-bar-fill ' + depthBarClass + '" style="width:' + memPct + '%"></div></div> ' + memPct + '%</div>' +
+    '</div>' +
+  '</div>';
+
+  if (sorted.length === 0) {
+    html += renderEmptyQueues();
+  } else {
+    html += '<div class="section-title">Queue Health</div>' +
+      '<table class="data-table"><thead><tr>' +
+        '<th>Queue</th><th>Depth</th><th class="num">Pub Rate</th><th class="num">Con Rate</th><th>Consumers</th><th>Status</th>' +
+      '</tr></thead><tbody>';
+    sorted.forEach(function(q) {
+      var sev = queueSeverity(q);
+      var badge = sev === 2 ? '<span class="badge critical"><span class="badge-dot"></span>Critical</span>' :
+                  sev === 1 ? '<span class="badge warning"><span class="badge-dot"></span>Warning</span>' :
+                  '<span class="badge healthy"><span class="badge-dot"></span>OK</span>';
+      var depthPct = q.max_size ? Math.min(100, ((q.depth || 0) / q.max_size) * 100) : 0;
+      var barClass = depthPct > 90 ? "critical" : depthPct > 70 ? "high" : "";
+      html += '<tr>' +
+        '<td class="queue-name" onclick="navigate(\'/queues/' + enc(q.name) + '\')">' + esc(q.name) + '</td>' +
+        '<td class="num">' + fmtNum(q.depth || 0) + ' <div class="depth-bar"><div class="depth-bar-fill ' + barClass + '" style="width:' + depthPct + '%"></div></div></td>' +
+        '<td class="num">' + fmtRate(q.pub_rate || 0) + '/s</td>' +
+        '<td class="num">' + fmtRate(q.con_rate || 0) + '/s</td>' +
+        '<td class="num">' + (q.consumer_count || q.consumers || 0) + '</td>' +
+        '<td>' + badge + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+  setHTML(content, html);
+}
+
+// 2. Queues List
+function renderQueuesList(content) {
+  renderHeader([{ label: "Queues", path: "/queues" }]);
+  var sorted = S.queues.slice().sort(function(a, b) { return (a.name || "").localeCompare(b.name || ""); });
+  var html = '<div class="toolbar">' +
+    '<input class="search-input" placeholder="Search queues..." id="queue-search">' +
+    '<div style="margin-left:auto"><span style="font-size:var(--text-xs);color:var(--text-tertiary)">' + S.queues.length + ' queues</span></div>' +
+  '</div>' +
+  '<div class="card-list" id="queue-cards">' +
+    (sorted.length === 0 ? renderEmptyQueues() : sorted.map(renderQueueCard).join("")) +
+  '</div>';
+  setHTML(content, html);
+  var searchInput = el("queue-search");
+  if (searchInput) searchInput.addEventListener("input", filterQueues);
+}
+
+function renderQueueCard(q) {
+  var isDLQ = (q.name || "").endsWith(".dlq");
+  var cons = q.consumer_count || q.consumers || 0;
+  return '<div class="card ' + (isDLQ ? "dlq" : "") + '" onclick="navigate(\'/queues/' + enc(q.name) + '\')">' +
+    '<div class="card-header">' +
+      '<span class="card-title">' + esc(q.name) + '</span>' +
+      '<span style="font-size:var(--text-xs);color:var(--text-tertiary)">' + cons + ' cons</span>' +
+    '</div>' +
+    '<div class="card-stats">' +
+      '<span><span class="stat-label">Depth:</span><span class="stat-value">' + fmtNum(q.depth || 0) + '</span></span>' +
+      '<span><span class="stat-label">In-flight:</span><span class="stat-value">' + fmtNum(q.in_flight || 0) + '</span></span>' +
+      '<span><span class="stat-label">Pub:</span><span class="stat-value">' + fmtRate(q.pub_rate || 0) + '/s</span></span>' +
+      '<span><span class="stat-label">Con:</span><span class="stat-value">' + fmtRate(q.con_rate || 0) + '/s</span></span>' +
+      (q.schema_version ? '<span><span class="stat-label">Schema:</span><span class="stat-value">v' + q.schema_version + '</span></span>' : "") +
+    '</div>' +
+  '</div>';
+}
+
+function filterQueues() {
+  var search = (el("queue-search").value || "").toLowerCase();
+  var container = el("queue-cards");
+  if (!container) return;
+  var sorted = S.queues
+    .filter(function(q) { return !search || (q.name || "").toLowerCase().indexOf(search) >= 0; })
+    .sort(function(a, b) { return (a.name || "").localeCompare(b.name || ""); });
+  setHTML(container, sorted.length === 0
+    ? '<div class="empty-state"><p>No queues match your search.</p></div>'
+    : sorted.map(renderQueueCard).join(""));
+}
+
+// 3. Queue Detail
+function renderQueueDetail(content, name, params) {
+  var q = S.queues.find(function(q) { return q.name === name; });
+  var tab = (params && params.get("tab")) || "metrics";
+
+  renderHeader([
+    { label: "Queues", path: "/queues" },
+    { label: name, path: "/queues/" + enc(name) }
+  ]);
+
+  var dlqCount = q ? (q.dlq_count || q.dlq_depth || 0) : 0;
+  var tabs = [
+    { id: "metrics", label: "Metrics" },
+    { id: "messages", label: "Messages" },
+    { id: "consumers", label: "Consumers" },
+    { id: "schema", label: "Schema" },
+    { id: "dlq", label: "DLQ", badge: dlqCount > 0 ? dlqCount : null }
+  ];
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">' +
+    '<h2 style="font-family:var(--font-mono);font-size:var(--text-xl);font-weight:600">' + esc(name) + '</h2>' +
+    '<button class="btn btn-danger" id="purge-btn">Purge</button>' +
+  '</div>';
+
+  if (q) {
+    html += '<div class="stat-row">' +
+      '<div class="stat-item"><div class="stat-item-label">Depth</div><div class="stat-item-value">' + fmtNum(q.depth || 0) + '</div></div>' +
+      '<div class="stat-item"><div class="stat-item-label">In-flight</div><div class="stat-item-value">' + fmtNum(q.in_flight || 0) + '</div></div>' +
+      '<div class="stat-item"><div class="stat-item-label">Max Size</div><div class="stat-item-value">' + fmtNum(q.max_size || 100000) + '</div></div>' +
+      '<div class="stat-item"><div class="stat-item-label">Pub Rate</div><div class="stat-item-value">' + fmtRate(q.pub_rate || 0) + '/s</div></div>' +
+      '<div class="stat-item"><div class="stat-item-label">Con Rate</div><div class="stat-item-value">' + fmtRate(q.con_rate || 0) + '/s</div></div>' +
+      '<div class="stat-item"><div class="stat-item-label">DLQ</div><div class="stat-item-value"' + (dlqCount > 0 ? ' style="color:var(--status-critical)"' : '') + '>' + fmtNum(dlqCount) + '</div></div>' +
+    '</div>';
+  }
+
+  html += '<div class="tabs">' + tabs.map(function(t) {
+    return '<div class="tab ' + (t.id === tab ? "active" : "") + '" data-tab="' + t.id + '">' +
+      t.label + (t.badge != null ? '<span class="tab-badge">' + t.badge + '</span>' : "") +
+    '</div>';
+  }).join("") + '</div><div id="tab-content"></div>';
+
+  setHTML(content, html);
+
+  // Bind events
+  var purgeBtn = el("purge-btn");
+  if (purgeBtn) purgeBtn.addEventListener("click", function() { confirmPurge(name); });
+  content.querySelectorAll(".tab").forEach(function(tabEl) {
+    tabEl.addEventListener("click", function() {
+      navigate("/queues/" + enc(name) + "?tab=" + tabEl.dataset.tab);
+    });
+  });
+
+  var tc = el("tab-content");
+  if (tab === "metrics") renderQueueMetrics(tc, name);
+  else if (tab === "messages") renderQueueMessages(tc, name);
+  else if (tab === "consumers") renderQueueConsumers(tc, name);
+  else if (tab === "schema") renderQueueSchema(tc, name);
+  else if (tab === "dlq") renderQueueDLQ(tc, name);
+}
+
+function renderQueueMetrics(container, name) {
+  var data = S.sparkData[name] || [];
+  setHTML(container,
+    '<div class="chart-container">' +
+      '<div class="chart-header"><span class="chart-title">Throughput</span></div>' +
+      '<div class="chart-area">' + renderSVGChart(data, ["pubRate", "conRate"], ["var(--chart-1)", "var(--chart-2)"]) + '</div>' +
+      '<div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2);display:flex;gap:var(--space-4)">' +
+        '<span><span style="color:var(--chart-1)">---</span> Publish</span>' +
+        '<span><span style="color:var(--chart-2)">---</span> Consume</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="chart-container">' +
+      '<div class="chart-header"><span class="chart-title">Queue Depth</span></div>' +
+      '<div class="chart-area">' + renderSVGChart(data, ["depth"], ["var(--amber-400)"], true) + '</div>' +
+    '</div>'
+  );
+}
+
+function renderQueueMessages(container, name) {
+  setHTML(container, '<div style="color:var(--text-tertiary)">Loading messages...</div>');
+  api("/queues/" + enc(name) + "/messages").then(function(msgs) {
+    var list = Array.isArray(msgs) ? msgs : (msgs ? msgs.messages || [] : []);
+    if (list.length === 0) {
+      setHTML(container, '<div class="empty-state"><p>No messages to peek at.</p></div>');
+      return;
+    }
+    var html = '<table class="data-table"><thead><tr><th>ID</th><th>Published</th><th>Size</th><th>Attempt</th></tr></thead><tbody>';
+    list.forEach(function(m) {
+      var mid = m.id || m.message_id || "";
+      html += '<tr class="msg-row" data-id="' + esc(mid) + '">' +
+        '<td><code style="font-size:var(--text-xs)">' + esc(mid.slice(0, 16)) + '...</code></td>' +
+        '<td>' + (m.published_at ? relTime(m.published_at) : '--') + '</td>' +
+        '<td class="num">' + (m.size ? fmtBytes(m.size) : '--') + '</td>' +
+        '<td class="num">' + (m.attempt || m.attempts || 1) + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table>';
+    setHTML(container, html);
+    container.querySelectorAll(".msg-row").forEach(function(row) {
+      row.style.cursor = "pointer";
+      row.addEventListener("click", function() {
+        navigate("/queues/" + enc(name) + "/messages/" + enc(row.dataset.id));
+      });
+    });
+  });
+}
+
+function renderQueueConsumers(container, name) {
+  var list = S.consumers.filter(function(c) { return c.queue === name || c.queue_name === name; });
+  if (list.length === 0) {
+    setHTML(container, '<div class="empty-state"><p>No consumers connected to this queue.</p></div>');
+    return;
+  }
+  setHTML(container, list.map(renderConsumerRow).join(""));
+}
+
+function renderQueueSchema(container, name) {
+  setHTML(container, '<div style="color:var(--text-tertiary)">Loading schema...</div>');
+  api("/schemas/" + enc(name)).then(function(schema) {
+    if (!schema) {
+      setHTML(container, '<div class="empty-state"><p>No schema registered for this queue.</p></div>');
+      return;
+    }
+    renderSchemaContent(container, schema);
+  });
+}
+
+function renderQueueDLQ(container, name) {
+  setHTML(container, '<div style="color:var(--text-tertiary)">Loading DLQ...</div>');
+  api("/queues/" + enc(name) + "/dlq").then(function(dlq) {
+    var list = Array.isArray(dlq) ? dlq : (dlq ? dlq.messages || [] : []);
+    if (list.length === 0) {
+      setHTML(container, '<div class="empty-state"><p>No dead-letter messages. Everything is processing correctly.</p></div>');
+      return;
+    }
+    var html = '<div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-4)">' +
+      '<button class="btn btn-primary" id="retry-dlq-btn">Retry All (' + list.length + ')</button>' +
+      '<button class="btn btn-danger" id="purge-dlq-btn">Delete All</button>' +
+    '</div>' +
+    '<table class="data-table"><thead><tr><th>ID</th><th>Failed At</th><th>Attempts</th><th>Actions</th></tr></thead><tbody>';
+    list.forEach(function(m) {
+      var mid = m.id || m.message_id || "";
+      html += '<tr>' +
+        '<td><code style="font-size:var(--text-xs)">' + esc(mid.slice(0, 16)) + '...</code></td>' +
+        '<td>' + (m.failed_at ? relTime(m.failed_at) : '--') + '</td>' +
+        '<td class="num">' + (m.attempt || m.attempts || '--') + '</td>' +
+        '<td><button class="btn btn-default inspect-btn" style="font-size:var(--text-xs);padding:2px 8px" data-id="' + esc(mid) + '">Inspect</button></td>' +
+      '</tr>';
+    });
+    html += '</tbody></table>';
+    setHTML(container, html);
+    var retryBtn = el("retry-dlq-btn");
+    var purgeBtn = el("purge-dlq-btn");
+    if (retryBtn) retryBtn.addEventListener("click", function() { retryDLQ(name); });
+    if (purgeBtn) purgeBtn.addEventListener("click", function() { purgeDLQ(name); });
+    container.querySelectorAll(".inspect-btn").forEach(function(btn) {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        navigate("/queues/" + enc(name) + "/messages/" + enc(btn.dataset.id));
+      });
+    });
+  });
+}
+
+// 4. Message Inspector
+function renderMessageInspector(content, queueName, msgId) {
+  renderHeader([
+    { label: "Queues", path: "/queues" },
+    { label: queueName, path: "/queues/" + enc(queueName) },
+    { label: msgId.slice(0, 12) + "...", path: "/queues/" + enc(queueName) + "/messages/" + enc(msgId) }
+  ]);
+  setHTML(content, '<div style="color:var(--text-tertiary)">Loading message...</div>');
+
+  api("/queues/" + enc(queueName) + "/messages").then(function(msgs) {
+    var list = Array.isArray(msgs) ? msgs : (msgs ? msgs.messages || [] : []);
+    var msg = list.find(function(m) { return (m.id || m.message_id) === msgId; });
+    if (msg) return msg;
+    return api("/queues/" + enc(queueName) + "/dlq").then(function(dlq) {
+      var dlqList = Array.isArray(dlq) ? dlq : (dlq ? dlq.messages || [] : []);
+      return dlqList.find(function(m) { return (m.id || m.message_id) === msgId; }) || null;
+    });
+  }).then(function(msg) {
+    if (!msg) {
+      setHTML(content, '<div class="empty-state"><p>Message not found.</p></div>');
+      return;
+    }
+    var payload = msg.payload || msg.body || msg.data || {};
+    var payloadStr = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+
+    setHTML(content,
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">' +
+        '<code style="font-size:var(--text-sm);color:var(--text-secondary)">' + esc(msg.id || msg.message_id || "") + '</code>' +
+        '<button class="btn btn-default" id="copy-payload-btn">Copy Payload</button>' +
+      '</div>' +
+      '<div class="msg-panel">' +
+        '<div class="msg-meta">' +
+          '<span class="msg-meta-key">Queue</span><span class="msg-meta-value">' + esc(queueName) + '</span>' +
+          '<span class="msg-meta-key">Published</span><span class="msg-meta-value">' + (msg.published_at ? relTime(msg.published_at) + ' (' + new Date(msg.published_at).toISOString() + ')' : '--') + '</span>' +
+          '<span class="msg-meta-key">Attempt</span><span class="msg-meta-value">' + (msg.attempt || msg.attempts || 1) + (msg.max_retries ? ' of ' + msg.max_retries : '') + '</span>' +
+          '<span class="msg-meta-key">Size</span><span class="msg-meta-value">' + (msg.size ? fmtBytes(msg.size) : '--') + '</span>' +
+          (msg.headers ? '<span class="msg-meta-key">Headers</span><span class="msg-meta-value">' + esc(JSON.stringify(msg.headers)) + '</span>' : '') +
+        '</div>' +
+        '<div class="msg-payload">' +
+          '<div class="code-block" id="msg-payload-block">' + highlightJSON(payloadStr) + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+
+    var copyBtn = el("copy-payload-btn");
+    if (copyBtn) copyBtn.addEventListener("click", copyPayload);
+  });
+}
+
+// 5. Consumers
+function renderConsumers(content) {
+  renderHeader([{ label: "Consumers", path: "/consumers" }]);
+  var groups = {};
+  S.consumers.forEach(function(c) {
+    var q = c.queue || c.queue_name || "Unsubscribed";
+    if (!groups[q]) groups[q] = [];
+    groups[q].push(c);
+  });
+
+  if (S.consumers.length === 0) {
+    setHTML(content, '<div class="section-title">Consumers</div><div class="empty-state"><p>No consumers connected.</p></div>');
+    return;
+  }
+
+  var html = '<div class="section-title">Consumers (' + S.consumers.length + ')</div>';
+  Object.keys(groups).forEach(function(q) {
+    html += '<div class="consumer-group">' +
+      '<div class="consumer-group-title">' +
+        '<span class="queue-name" style="cursor:pointer" data-queue="' + esc(q) + '">' + esc(q) + '</span>' +
+        '<span style="font-size:var(--text-xs);color:var(--text-tertiary)">' + groups[q].length + ' consumer' + (groups[q].length !== 1 ? 's' : '') + '</span>' +
+      '</div>' +
+      groups[q].map(renderConsumerRow).join("") +
+    '</div>';
+  });
+  setHTML(content, html);
+  content.querySelectorAll(".queue-name[data-queue]").forEach(function(el) {
+    el.addEventListener("click", function() { navigate("/queues/" + enc(el.dataset.queue)); });
+  });
+}
+
+function renderConsumerRow(c) {
+  var addr = c.address || c.addr || c.id || "unknown";
+  var rate = c.ack_rate || c.rate || 0;
+  var connected = c.connected_at || c.connected || "";
+  return '<div class="consumer-row">' +
+    '<div class="consumer-dot active"></div>' +
+    '<span class="consumer-name">' + esc(addr) + '</span>' +
+    '<div class="consumer-stats">' +
+      '<span>Processed: ' + fmtNum(c.processed || c.total_processed || 0) + '</span>' +
+      '<span style="color:var(--text-tertiary)">|</span>' +
+      '<span>Ack rate: ' + (rate > 0 ? rate.toFixed(1) + '%' : '--') + '</span>' +
+    '</div>' +
+    '<span class="consumer-duration">' + (connected ? relTime(connected) : '--') + '</span>' +
+  '</div>';
+}
+
+// 6. Schemas
+function renderSchemas(content) {
+  renderHeader([{ label: "Schemas", path: "/schemas" }]);
+  var html = '<div class="section-title">Schemas (' + S.schemas.length + ')</div>';
+  if (S.schemas.length === 0) {
+    html += '<div class="empty-state"><p>No schemas registered.</p>' +
+      '<div class="code-block" style="margin-top:var(--space-2)">qwer-q schema register --queue orders --proto ./order.proto --type myapp.Order</div></div>';
+  } else {
+    html += '<div class="card-list">';
+    S.schemas.forEach(function(s) {
+      html += '<div class="card schema-card" data-schema="' + esc(s.queue || s.name || '') + '">' +
+        '<div class="card-header">' +
+          '<span class="card-title">' + esc(s.queue || s.name || '') + '</span>' +
+          '<span style="font-size:var(--text-xs);color:var(--amber-400)">v' + (s.version || 1) + '</span>' +
+        '</div>' +
+        '<div class="card-stats">' +
+          (s.message_type ? '<span><span class="stat-label">Type:</span><span class="stat-value">' + esc(s.message_type) + '</span></span>' : '') +
+          (s.registered_at ? '<span><span class="stat-label">Registered:</span><span class="stat-value">' + new Date(s.registered_at).toLocaleDateString() + '</span></span>' : '') +
+        '</div>' +
+        (s.fields && Array.isArray(s.fields) ? '<div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">' + s.fields.slice(0, 6).join(', ') + (s.fields.length > 6 ? ' ...and ' + (s.fields.length - 6) + ' more' : '') + '</div>' : '') +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  setHTML(content, html);
+  content.querySelectorAll(".schema-card").forEach(function(card) {
+    card.addEventListener("click", function() { navigate("/schemas/" + enc(card.dataset.schema)); });
+  });
+}
+
+// Schema Detail
+function renderSchemaDetail(content, name) {
+  renderHeader([
+    { label: "Schemas", path: "/schemas" },
+    { label: name, path: "/schemas/" + enc(name) }
+  ]);
+  setHTML(content, '<div style="color:var(--text-tertiary)">Loading schema...</div>');
+  api("/schemas/" + enc(name)).then(function(schema) {
+    if (!schema) {
+      setHTML(content, '<div class="empty-state"><p>Schema not found.</p></div>');
+      return;
+    }
+    renderSchemaContent(content, schema);
+  });
+}
+
+function renderSchemaContent(container, schema) {
+  var def = schema.definition || schema.proto || schema.schema || "";
+  var versions = schema.versions || schema.history || [];
+  var html = '<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)">' +
+    '<h2 style="font-family:var(--font-mono);font-size:var(--text-xl);font-weight:600">' + esc(schema.queue || schema.name || '') + '</h2>' +
+    '<span class="badge" style="background:var(--amber-900);color:var(--amber-400)">v' + (schema.version || 1) + '</span>' +
+  '</div>';
+  if (schema.message_type) {
+    html += '<div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-4)">Message type: <code>' + esc(schema.message_type) + '</code></div>';
+  }
+  if (def) {
+    html += '<div class="code-block">' + highlightProto(def) + '</div>';
+  } else {
+    html += '<div style="color:var(--text-tertiary)">No schema definition available.</div>';
+  }
+  if (versions.length > 0) {
+    html += '<div style="margin-top:var(--space-5)"><div class="section-title" style="font-size:var(--text-sm)">Version History</div>' +
+      '<table class="data-table"><thead><tr><th>Version</th><th>Date</th><th>Change</th></tr></thead><tbody>';
+    versions.forEach(function(v) {
+      html += '<tr><td>v' + (v.version || v.v) + '</td><td>' + (v.date || v.updated_at || '--') + '</td><td>' + esc(v.description || v.change || '') + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  setHTML(container, html);
+}
+
+// 7. Settings
+function renderSettings(content) {
+  renderHeader([{ label: "Settings", path: "/settings" }]);
+  var s = S.stats;
+  setHTML(content,
+    '<div class="section-title">Settings</div>' +
+    '<div class="section-sub">Broker configuration (read-only). Values are set via CLI flags or environment variables.</div>' +
+    '<div class="settings-section"><h3>Broker Configuration</h3>' +
+      settingsRow("Listen address", s.listen_addr || s.address || ":9876") +
+      settingsRow("Storage backend", s.storage_backend || "BadgerDB") +
+      settingsRow("Data directory", s.data_dir || "/data") +
+      settingsRow("Sync interval", s.sync_interval || "100ms") +
+      settingsRow("Memory limit", s.memory_limit || s.mem_limit ? fmtBytes(s.memory_limit || s.mem_limit) : "400 MB") +
+      settingsRow("Default max retries", String(s.max_retries || 5)) +
+      settingsRow("Default failure policy", s.failure_policy || "dlq") +
+      settingsRow("Max queue size", fmtNum(s.max_queue_size || s.default_max_queue_size || 100000)) +
+    '</div>' +
+    '<div class="settings-section"><h3>Runtime</h3>' +
+      settingsRow("Go version", s.go_version || "--") +
+      settingsRow("Uptime", formatUptime(s.uptime_seconds || s.uptime || 0) || "--") +
+      settingsRow("Goroutines", s.goroutines || "--") +
+      settingsRow("OS / Arch", (s.os || "--") + " / " + (s.arch || "--")) +
+    '</div>' +
+    '<div class="settings-section"><h3>Storage</h3>' +
+      settingsRow("DB size on disk", s.db_size ? fmtBytes(s.db_size) : "--") +
+      settingsRow("Total messages stored", s.total_messages ? fmtNum(s.total_messages) : "--") +
+    '</div>'
+  );
+}
+
+function settingsRow(key, value) {
+  return '<div class="settings-row"><span class="settings-key">' + esc(key) + '</span><span class="settings-value">' + esc(value) + '</span></div>';
+}
+
+// ===== Actions =====
+function confirmPurge(name) {
+  var overlay = document.createElement("div");
+  overlay.className = "dialog-overlay";
+  setHTML(overlay,
+    '<div class="dialog">' +
+      '<h3>Purge queue</h3>' +
+      '<p>This will permanently delete all messages in <strong>' + esc(name) + '</strong>. Type the queue name to confirm.</p>' +
+      '<input id="purge-input" placeholder="' + esc(name) + '" autocomplete="off">' +
+      '<div class="dialog-actions">' +
+        '<button class="btn btn-default" id="purge-cancel">Cancel</button>' +
+        '<button class="btn btn-danger" id="purge-confirm" disabled>Purge</button>' +
+      '</div>' +
+    '</div>'
+  );
+  document.body.appendChild(overlay);
+  var input = el("purge-input");
+  var btn = el("purge-confirm");
+  input.addEventListener("input", function() { btn.disabled = input.value !== name; });
+  el("purge-cancel").addEventListener("click", function() { overlay.remove(); });
+  btn.addEventListener("click", function() {
+    overlay.remove();
+    apiDelete("/queues/" + enc(name)).then(function(r) {
+      if (r !== null) { toast("Queue purged", "success"); fetchAll().then(renderCurrent); }
+      else toast("Failed to purge queue", "error");
+    });
+  });
+  overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+  input.focus();
+}
+
+function retryDLQ(name) {
+  apiPost("/queues/" + enc(name) + "/dlq/retry").then(function(r) {
+    if (r !== null) { toast("DLQ messages retried", "success"); fetchAll().then(renderCurrent); }
+    else toast("Failed to retry DLQ messages", "error");
+  });
+}
+
+function purgeDLQ(name) {
+  apiDelete("/queues/" + enc(name) + "/dlq").then(function(r) {
+    if (r !== null) { toast("DLQ purged", "success"); fetchAll().then(renderCurrent); }
+    else toast("Failed to purge DLQ", "error");
+  });
+}
+
+function copyPayload() {
+  var block = el("msg-payload-block");
+  if (block) {
+    navigator.clipboard.writeText(block.textContent).then(
+      function() { toast("Payload copied", "success"); },
+      function() { toast("Copy failed", "error"); }
+    );
+  }
+}
+
+// ===== Keyboard Shortcuts =====
+document.addEventListener("keydown", function(e) {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+    if (e.key === "Escape") e.target.blur();
+    return;
+  }
+
+  var r = getRoute();
+  var isQueueDetail = r.path.match(/^\/queues\/([^/]+)$/);
+
+  if (e.key === "?" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleHelp(); return; }
+  if (e.key === "Escape") {
+    var help = document.querySelector(".help-overlay");
+    if (help) { help.remove(); return; }
+    var dialog = document.querySelector(".dialog-overlay");
+    if (dialog) { dialog.remove(); return; }
+  }
+  if (e.key === "/") { e.preventDefault(); var si = document.querySelector(".search-input"); if (si) si.focus(); return; }
+  if (e.key === "[") { toggleSidebar(); return; }
+
+  if (!isQueueDetail) {
+    if (e.key === "1") { navigate("/"); return; }
+    if (e.key === "2") { navigate("/queues"); return; }
+    if (e.key === "3") { navigate("/consumers"); return; }
+    if (e.key === "4") { navigate("/schemas"); return; }
+    if (e.key === "5") { navigate("/settings"); return; }
+  } else {
+    var qName = decodeURIComponent(isQueueDetail[1]);
+    if (e.key === "1") { navigate("/queues/" + enc(qName) + "?tab=metrics"); return; }
+    if (e.key === "2") { navigate("/queues/" + enc(qName) + "?tab=messages"); return; }
+    if (e.key === "3") { navigate("/queues/" + enc(qName) + "?tab=consumers"); return; }
+    if (e.key === "4") { navigate("/queues/" + enc(qName) + "?tab=schema"); return; }
+    if (e.key === "5") { navigate("/queues/" + enc(qName) + "?tab=dlq"); return; }
+    if (e.key === "Backspace") { e.preventDefault(); navigate("/queues"); return; }
+  }
+
+  var isMsgInspector = r.path.match(/^\/queues\/([^/]+)\/messages\/[^/]+$/);
+  if (isMsgInspector) {
+    if (e.key === "c") { copyPayload(); return; }
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      navigate("/queues/" + enc(decodeURIComponent(isMsgInspector[1])));
+      return;
+    }
+  }
+});
+
+function toggleHelp() {
+  var existing = document.querySelector(".help-overlay");
+  if (existing) { existing.remove(); return; }
+  var overlay = document.createElement("div");
+  overlay.className = "help-overlay";
+  setHTML(overlay,
+    '<div class="help-panel">' +
+      '<h3>Keyboard Shortcuts</h3>' +
+      '<table>' +
+        '<tr><td colspan="2" class="section-label">Global</td></tr>' +
+        '<tr><td>1-5</td><td>Navigate to section</td></tr>' +
+        '<tr><td>/</td><td>Focus search</td></tr>' +
+        '<tr><td>?</td><td>Toggle this help</td></tr>' +
+        '<tr><td>[</td><td>Toggle sidebar</td></tr>' +
+        '<tr><td>Esc</td><td>Close overlay / back</td></tr>' +
+        '<tr><td colspan="2" class="section-label">Queue Detail</td></tr>' +
+        '<tr><td>1-5</td><td>Switch tabs</td></tr>' +
+        '<tr><td>Bksp</td><td>Back to queues</td></tr>' +
+        '<tr><td colspan="2" class="section-label">Message Inspector</td></tr>' +
+        '<tr><td>c</td><td>Copy payload</td></tr>' +
+        '<tr><td>Bksp</td><td>Back to queue</td></tr>' +
+      '</table>' +
+    '</div>'
+  );
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+}
+
+function toggleSidebar() {
+  S.sidebarCollapsed = !S.sidebarCollapsed;
+  el("sidebar").classList.toggle("collapsed", S.sidebarCollapsed);
+}
+
+// ===== Sidebar Toggle =====
+el("sidebar-toggle").addEventListener("click", toggleSidebar);
+
+// ===== Init =====
+function init() {
+  fetchAll().then(function() {
+    renderCurrent();
+    connectWS();
+    S.pollTimer = setInterval(function() {
+      fetchAll().then(renderCurrent);
+    }, 5000);
+  });
+}
+
+window.addEventListener("hashchange", function() {
+  updateNav();
+  renderCurrent();
+});
+
+init();
+
+})();
+</script>
+</body>
+</html>

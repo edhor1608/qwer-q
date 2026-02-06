@@ -11,6 +11,7 @@ message PublishRequest {
   map<string, string> headers = 3;
   optional string message_id = 4;      // Client-provided, or broker generates
   optional string idempotency_key = 5; // For deduplication
+  string ordering_key = 6;             // Optional: messages with same key go to same consumer
 }
 
 // PublishResponse confirms a publish.
@@ -23,6 +24,22 @@ message ConsumeRequest {
   string queue = 1;
   uint32 prefetch = 2;           // Max unacked messages (default 1)
   uint32 visibility_timeout = 3; // Seconds before redelivery (default 30)
+  optional string group = 4;     // Consumer group name (omit for simple competing consumers)
+}
+
+// HeartbeatRequest keeps a consumer group member alive.
+message HeartbeatRequest {
+  string group = 1;
+  string queue = 2;
+}
+
+// HeartbeatResponse confirms the heartbeat.
+message HeartbeatResponse {}
+
+// UnsubscribeRequest removes a consumer from a queue/group.
+message UnsubscribeRequest {
+  string queue = 1;
+  optional string group = 2;
 }
 
 // Message is delivered to consumers.
@@ -33,6 +50,7 @@ message Message {
   map<string, string> headers = 4;
   uint32 attempt = 5;           // Delivery attempt number (1-based)
   int64 published_at = 6;       // Unix timestamp millis
+  string ordering_key = 7;      // Ordering key (if set during publish)
 }
 
 // AckRequest acknowledges a message.
@@ -118,4 +136,59 @@ message ExtendVisibilityRequest {
 // ExtendVisibilityResponse confirms the extension.
 message ExtendVisibilityResponse {
   int64 new_visible_at = 1;  // New visibility timestamp (Unix millis)
+}
+
+// AuthRequest is sent by client to authenticate.
+message AuthRequest {
+  string token = 1;
+}
+
+// AuthResponse confirms or rejects authentication.
+message AuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// SeekRequest positions a stream consumer at a specific offset.
+message SeekRequest {
+  string queue = 1;
+  string consumer_group = 2;  // Consumer group name
+  SeekPosition position = 3;
+  uint64 offset = 4;          // Used when position is OFFSET
+  int64 timestamp = 5;        // Unix millis, used when position is TIMESTAMP
+}
+
+// SeekPosition defines where to start consuming in a stream.
+enum SeekPosition {
+  SEEK_BEGINNING = 0;
+  SEEK_END = 1;
+  SEEK_OFFSET = 2;
+  SEEK_TIMESTAMP = 3;
+}
+
+// SeekResponse confirms the seek operation.
+message SeekResponse {
+  uint64 offset = 1;  // The resolved offset
+}
+
+// CommitOffsetRequest commits a consumer group's offset.
+message CommitOffsetRequest {
+  string queue = 1;
+  string consumer_group = 2;
+  uint64 offset = 3;
+}
+
+// CommitOffsetResponse confirms the offset commit.
+message CommitOffsetResponse {
+  uint64 offset = 1;  // The committed offset
+}
+
+// StreamMessage is delivered to stream consumers (includes sequence number).
+message StreamMessage {
+  string message_id = 1;
+  string queue = 2;
+  bytes payload = 3;
+  map<string, string> headers = 4;
+  uint64 sequence = 5;       // Monotonic sequence number within the queue
+  int64 published_at = 6;    // Unix timestamp millis
 }

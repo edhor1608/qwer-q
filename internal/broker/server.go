@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"crypto/subtle"
 	"io"
 	"net"
 	"sync"
@@ -34,6 +35,7 @@ type Server struct {
 	wg         sync.WaitGroup
 	done       chan struct{}
 	ready      chan struct{} // closed when server is listening
+	authToken  string       // if set, clients must authenticate before any other operation
 }
 
 // NewServer creates a new server with the given broker.
@@ -51,6 +53,13 @@ func NewServer(broker *Broker) *Server {
 func (s *Server) SetReplicator(r Replicator) {
 	s.replicator = r
 }
+
+// SetAuthToken configures the required auth token. When set, clients must
+// send OpAuth with a matching token as their first message.
+func (s *Server) SetAuthToken(token string) {
+	s.authToken = token
+}
+
 
 // Registry returns the schema registry.
 func (s *Server) Registry() *schema.Registry {
@@ -105,13 +114,18 @@ func (s *Server) Close() error {
 
 // connState tracks per-connection state.
 type connState struct {
-	queueName   string
-	clientAddr  string
-	msgCh       <-chan *Message
-	stopCh      chan struct{}
-	deliverWg   sync.WaitGroup
-	writeMu     sync.Mutex
-	callManager *CallManager
+	queueName      string
+	groupName      string // consumer group name (empty for legacy)
+	clientAddr     string
+	msgCh          <-chan *Message
+	stopCh         chan struct{}
+	deliverWg      sync.WaitGroup
+	writeMu        sync.Mutex
+	callManager    *CallManager
+	authenticated  bool            // true once OpAuth succeeds (or if auth is disabled)
+	streamMode     bool            // true if consuming from a stream queue
+	consumerGroup  string          // stream consumer group name
+	streamConsumer *StreamConsumer // stream consumer reference
 }
 
 func (s *Server) handleConn(conn net.Conn) {
@@ -122,17 +136,33 @@ func (s *Server) handleConn(conn net.Conn) {
 	LogConnect(clientAddr)
 
 	state := &connState{
-		clientAddr: clientAddr,
-		stopCh:     make(chan struct{}),
+		clientAddr:    clientAddr,
+		stopCh:        make(chan struct{}),
+		authenticated: s.authToken == "", // bypass auth when no token configured
 	}
 	defer func() {
 		LogDisconnect(clientAddr)
 		close(state.stopCh)
 		state.deliverWg.Wait()
-		if state.msgCh != nil {
+		if state.streamConsumer != nil {
+			sq := s.broker.GetStreamQueue(state.queueName)
+			if sq != nil {
+				sq.RemoveConsumer(state.streamConsumer.Ch)
+			}
+		} else if state.msgCh != nil {
 			q := s.broker.GetQueue(state.queueName)
 			if q != nil {
-				q.RemoveConsumer(state.msgCh)
+				if state.groupName != "" {
+					g := q.GetGroup(state.groupName)
+					if g != nil {
+						empty := g.RemoveMember(clientAddr)
+						if empty {
+							q.RemoveGroup(state.groupName)
+						}
+					}
+				} else {
+					q.RemoveConsumer(state.msgCh)
+				}
 			}
 		}
 		if state.callManager != nil {
@@ -147,6 +177,21 @@ func (s *Server) handleConn(conn net.Conn) {
 				return
 			}
 			return
+		}
+
+		// Auth gate: when auth is required, only OpAuth is allowed before authentication
+		if !state.authenticated {
+			if frame.OpCode != protocol.OpAuth {
+				resp := EncodeError(9, "authentication required")
+				conn.Write(resp)
+				return // disconnect
+			}
+			resp := s.handleAuth(frame.Payload, state)
+			conn.Write(resp)
+			if !state.authenticated {
+				return // auth failed, disconnect
+			}
+			continue
 		}
 
 		resp := s.handleFrame(frame, state, conn)
@@ -170,6 +215,10 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 		return s.handleNack(frame.Payload, state)
 	case protocol.OpExtendVisibility:
 		return s.handleExtendVisibility(frame.Payload, state)
+	case protocol.OpSeek:
+		return s.handleSeek(frame.Payload, state, conn)
+	case protocol.OpCommitOffset:
+		return s.handleCommitOffset(frame.Payload, state)
 	case protocol.OpSchemaRegister:
 		return s.handleSchemaRegister(frame.Payload)
 	case protocol.OpSchemaGet:
@@ -178,6 +227,10 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 		return s.handleSchemaList()
 	case protocol.OpQueueList:
 		return s.handleQueueList()
+	case protocol.OpHeartbeat:
+		return s.handleHeartbeat(frame.Payload, state)
+	case protocol.OpUnsubscribe:
+		return s.handleUnsubscribe(frame.Payload, state)
 	case protocol.OpCall:
 		return s.handleCall(frame.Payload, state)
 	default:
@@ -230,6 +283,19 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 		return protocol.EncodeFrame(protocol.OpPublishAck, data)
 	}
 
+	// Check if this is a stream queue
+	if s.broker.IsStreamQueue(req.GetQueue()) {
+		resp, _, err := s.broker.HandleStreamPublish(&req)
+		if err != nil {
+			LogError("stream publish failed", err, "queue", req.GetQueue(), "client", clientAddr)
+			return EncodeError(3, err.Error())
+		}
+		LogPublish(req.GetQueue(), resp.MessageId, clientAddr)
+		RecordPublish(req.GetQueue(), time.Since(start).Seconds())
+		data, _ := proto.Marshal(resp)
+		return protocol.EncodeFrame(protocol.OpPublishAck, data)
+	}
+
 	// Single-node mode: apply directly.
 	resp, err := s.broker.HandlePublish(&req)
 	if err != nil {
@@ -256,7 +322,8 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 	}
 
 	state.queueName = req.GetQueue()
-	state.msgCh = s.broker.HandleConsume(&req)
+	state.groupName = req.GetGroup()
+	state.msgCh = s.broker.HandleConsume(&req, state.clientAddr)
 
 	// Start delivery goroutine
 	state.deliverWg.Add(1)
@@ -298,6 +365,14 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 		return EncodeError(2, "invalid request")
 	}
 
+	// In stream mode, ack is a no-op for message deletion (messages are retained).
+	// The consumer tracks progress via offset commits.
+	if state.streamMode {
+		LogAck(state.queueName, req.GetMessageId(), state.clientAddr)
+		RecordAck(state.queueName)
+		return nil
+	}
+
 	// Clustered mode: replicate ack through Raft.
 	if s.replicator != nil {
 		if !s.replicator.IsLeader() {
@@ -309,7 +384,7 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 		}
 	} else {
 		// Single-node mode
-		if !s.broker.HandleAck(&req, state.queueName) {
+		if !s.broker.HandleAck(&req, state.queueName, state.groupName) {
 			return EncodeError(4, "message not found")
 		}
 	}
@@ -341,7 +416,7 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 		}
 	} else {
 		// Single-node mode
-		if !s.broker.HandleNack(&req, state.queueName) {
+		if !s.broker.HandleNack(&req, state.queueName, state.groupName) {
 			return EncodeError(4, "message not found")
 		}
 	}
@@ -434,6 +509,15 @@ func (s *Server) handleQueueList() []byte {
 	names := s.broker.ListQueues()
 	queues := make([]*protocol.QueueInfo, 0, len(names))
 	for _, name := range names {
+		// Check if stream queue
+		sq := s.broker.GetStreamQueue(name)
+		if sq != nil {
+			queues = append(queues, &protocol.QueueInfo{
+				Name:         name,
+				MessageCount: uint32(sq.Len()),
+			})
+			continue
+		}
 		q := s.broker.GetQueue(name)
 		if q == nil {
 			continue
@@ -448,6 +532,172 @@ func (s *Server) handleQueueList() []byte {
 	data, _ := proto.Marshal(resp)
 	return protocol.EncodeFrame(protocol.OpQueueListResp, data)
 }
+
+func (s *Server) handleSeek(payload []byte, state *connState, conn net.Conn) []byte {
+	var req protocol.SeekRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	queueName := req.GetQueue()
+	group := req.GetConsumerGroup()
+	if group == "" {
+		group = state.clientAddr // default group per connection
+	}
+
+	// Ensure stream queue exists
+	sq := s.broker.GetStreamQueue(queueName)
+	if sq == nil {
+		// Create it as a stream queue
+		sq = s.broker.GetOrCreateStreamQueue(queueName)
+	}
+
+	// Resolve the offset
+	var offset uint64
+	switch req.GetPosition() {
+	case protocol.SeekPosition_SEEK_BEGINNING:
+		offset = 1
+	case protocol.SeekPosition_SEEK_END:
+		offset = sq.NextSequence()
+	case protocol.SeekPosition_SEEK_OFFSET:
+		offset = req.GetOffset()
+		if offset == 0 {
+			offset = 1
+		}
+	case protocol.SeekPosition_SEEK_TIMESTAMP:
+		if sq.storage != nil {
+			ts, err := sq.storage.GetStreamMessageByTimestamp(queueName, req.GetTimestamp())
+			if err != nil {
+				return EncodeError(3, err.Error())
+			}
+			if ts == 0 {
+				offset = sq.NextSequence()
+			} else {
+				offset = ts
+			}
+		} else {
+			offset = 1
+		}
+	default:
+		// Try to resume from committed offset
+		committed, err := sq.GetCommittedOffset(group)
+		if err != nil {
+			return EncodeError(3, err.Error())
+		}
+		if committed > 0 {
+			offset = committed + 1
+		} else {
+			offset = sq.NextSequence()
+		}
+	}
+
+	// Remove existing stream consumer for this connection
+	if state.streamConsumer != nil {
+		sq.RemoveConsumer(state.streamConsumer.Ch)
+		state.streamConsumer = nil
+	}
+
+	state.queueName = queueName
+	state.streamMode = true
+	state.consumerGroup = group
+
+	// Subscribe to stream
+	sc := sq.Subscribe(group, offset)
+	state.streamConsumer = sc
+	state.msgCh = sc.Ch
+
+	// Start delivery goroutine for stream messages
+	state.deliverWg.Add(1)
+	go func() {
+		defer state.deliverWg.Done()
+		for {
+			select {
+			case msg, ok := <-sc.Ch:
+				if !ok {
+					return
+				}
+				LogConsume(queueName, msg.ID, state.clientAddr)
+				RecordConsume(queueName)
+
+				smsg := StreamMessageToProto(msg)
+				data, _ := proto.Marshal(smsg)
+				frame := protocol.EncodeFrame(protocol.OpStreamMessage, data)
+
+				state.writeMu.Lock()
+				conn.Write(frame)
+				state.writeMu.Unlock()
+			case <-state.stopCh:
+				return
+			}
+		}
+	}()
+
+	// Send seek ack
+	resp := &protocol.SeekResponse{Offset: offset}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpSeekAck, data)
+}
+
+func (s *Server) handleCommitOffset(payload []byte, state *connState) []byte {
+	var req protocol.CommitOffsetRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	queueName := req.GetQueue()
+	if queueName == "" {
+		queueName = state.queueName
+	}
+	group := req.GetConsumerGroup()
+	if group == "" {
+		group = state.consumerGroup
+	}
+
+	sq := s.broker.GetStreamQueue(queueName)
+	if sq == nil {
+		return EncodeError(4, "stream queue not found")
+	}
+
+	if err := sq.CommitOffset(group, req.GetOffset()); err != nil {
+		return EncodeError(3, err.Error())
+	}
+
+	resp := &protocol.CommitOffsetResponse{Offset: req.GetOffset()}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpCommitOffsetAck, data)
+}
+
+func (s *Server) handleHeartbeat(payload []byte, state *connState) []byte {
+	var req protocol.HeartbeatRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	if !s.broker.HandleHeartbeat(&req, state.clientAddr) {
+		return EncodeError(4, "group member not found")
+	}
+
+	resp := &protocol.HeartbeatResponse{}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpHeartbeatAck, data)
+}
+
+func (s *Server) handleUnsubscribe(payload []byte, state *connState) []byte {
+	var req protocol.UnsubscribeRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	if !s.broker.HandleUnsubscribe(&req, state.clientAddr, state.msgCh) {
+		return EncodeError(4, "consumer not found")
+	}
+
+	// Clear connection state so disconnect cleanup doesn't double-remove
+	state.msgCh = nil
+	state.groupName = ""
+	return nil
+}
+
 
 func (s *Server) handleCall(payload []byte, state *connState) []byte {
 	var req protocol.CallRequest
@@ -470,4 +720,28 @@ func (s *Server) handleCall(payload []byte, state *connState) []byte {
 
 	data, _ := proto.Marshal(resp)
 	return protocol.EncodeFrame(protocol.OpCallResponse, data)
+}
+
+func (s *Server) handleAuth(payload []byte, state *connState) []byte {
+	var req protocol.AuthRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		resp := &protocol.AuthResponse{Success: false, Message: "invalid auth request"}
+		data, _ := proto.Marshal(resp)
+		return protocol.EncodeFrame(protocol.OpAuthResponse, data)
+	}
+
+	tokenBytes := []byte(req.GetToken())
+	expectedBytes := []byte(s.authToken)
+	if subtle.ConstantTimeCompare(tokenBytes, expectedBytes) == 1 {
+		state.authenticated = true
+		logger.Info("client authenticated", "addr", state.clientAddr)
+		resp := &protocol.AuthResponse{Success: true, Message: "authenticated"}
+		data, _ := proto.Marshal(resp)
+		return protocol.EncodeFrame(protocol.OpAuthResponse, data)
+	}
+
+	logger.Warn("authentication failed", "addr", state.clientAddr)
+	resp := &protocol.AuthResponse{Success: false, Message: "invalid token"}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpAuthResponse, data)
 }

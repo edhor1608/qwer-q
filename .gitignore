@@ -34,3 +34,8 @@ go.work.sum
 # Build output
 bin/
 qwer-q
+
+# Docs site
+docs-site/node_modules/
+docs-site/dist/
+docs-site/.astro/
