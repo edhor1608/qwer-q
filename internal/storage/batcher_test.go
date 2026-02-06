@@ -147,8 +147,11 @@ func TestBatcher_FlushOnClose(t *testing.T) {
 	}
 
 	// Write a few messages (won't trigger interval or max size flush)
+	var wg sync.WaitGroup
 	for i := 0; i < 3; i++ {
+		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			s.SaveMessage(&Message{
 				ID:      fmt.Sprintf("close-%d", i),
 				Queue:   "close-queue",
@@ -156,9 +159,7 @@ func TestBatcher_FlushOnClose(t *testing.T) {
 			})
 		}(i)
 	}
-
-	// Brief pause for writes to enter the batcher
-	time.Sleep(10 * time.Millisecond)
+	wg.Wait()
 
 	// Close should flush remaining
 	s.Close()
