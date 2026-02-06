@@ -20,13 +20,32 @@ const DefaultSyncInterval = 100 * time.Millisecond
 type StorageOption func(*badgerConfig)
 
 type badgerConfig struct {
-	syncInterval time.Duration
+	syncInterval  time.Duration
+	batchInterval time.Duration // 0 = no batching
+	batchMaxSize  int
 }
 
 // WithSyncInterval sets how often to fsync (0 = sync every write).
 func WithSyncInterval(d time.Duration) StorageOption {
 	return func(c *badgerConfig) { c.syncInterval = d }
 }
+
+// WithBatchInterval sets the write batch flush interval (0 = no batching).
+// When enabled, multiple SaveMessage calls are collected and flushed as a
+// single BadgerDB WriteBatch, amortizing transaction overhead.
+func WithBatchInterval(d time.Duration) StorageOption {
+	return func(c *badgerConfig) { c.batchInterval = d }
+}
+
+// WithBatchMaxSize sets the maximum number of writes per batch.
+// When the batch reaches this size, it flushes immediately without
+// waiting for the batch interval timer. Default: 100.
+func WithBatchMaxSize(n int) StorageOption {
+	return func(c *badgerConfig) { c.batchMaxSize = n }
+}
+
+// DefaultBatchMaxSize is the default maximum writes per batch.
+const DefaultBatchMaxSize = 100
 
 const (
 	msgPrefix   = "msg:"
@@ -38,6 +57,7 @@ type BadgerStorage struct {
 	db           *badger.DB
 	done         chan struct{}
 	syncInterval time.Duration
+	batcher      *writeBatcher // nil when batching disabled
 	closeOnce    sync.Once
 }
 
@@ -89,6 +109,15 @@ func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, er
 		go s.syncLoop()
 	}
 
+	// Start write batcher if configured
+	if cfg.batchInterval > 0 {
+		maxSize := cfg.batchMaxSize
+		if maxSize <= 0 {
+			maxSize = DefaultBatchMaxSize
+		}
+		s.batcher = newWriteBatcher(db, cfg.batchInterval, maxSize)
+	}
+
 	return s, nil
 }
 
@@ -97,8 +126,13 @@ func msgKey(queue, id string) []byte {
 	return []byte(msgPrefix + queue + ":" + id)
 }
 
-// SaveMessage persists a message.
+// SaveMessage persists a message. When write batching is enabled,
+// the write is queued and flushed with other writes for better throughput.
+// The call blocks until the write is durable in BadgerDB.
 func (s *BadgerStorage) SaveMessage(msg *Message) error {
+	if s.batcher != nil {
+		return s.batcher.submit(msg)
+	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -219,11 +253,15 @@ func (s *BadgerStorage) syncLoop() {
 	}
 }
 
-// Close syncs data and closes the database.
+// Close drains the write batcher, syncs data, and closes the database.
 // Safe to call multiple times.
 func (s *BadgerStorage) Close() error {
 	var closeErr error
 	s.closeOnce.Do(func() {
+		// Stop batcher first so all pending writes flush before we close DB
+		if s.batcher != nil {
+			s.batcher.close()
+		}
 		close(s.done)
 		if err := s.db.Sync(); err != nil {
 			log.Printf("badger final sync error: %v", err)

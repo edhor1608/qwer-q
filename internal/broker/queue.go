@@ -29,11 +29,12 @@ type Queue struct {
 	messages       []*Message
 	inFlight       map[string]*Message
 	consumers      []*Consumer
-	nextIdx        int           // round-robin index
-	maxSize        int           // maximum number of messages (0 = unlimited)
-	failurePolicy  FailurePolicy // what to do on max retries
-	maxRetries     uint32        // max delivery attempts before failure policy kicks in
-	keyAssignments map[string]*Consumer // ordering key -> assigned consumer
+	nextIdx        int                       // round-robin index
+	maxSize        int                       // maximum number of messages (0 = unlimited)
+	failurePolicy  FailurePolicy             // what to do on max retries
+	maxRetries     uint32                    // max delivery attempts before failure policy kicks in
+	keyAssignments map[string]*Consumer      // ordering key -> assigned consumer
+	groups         map[string]*ConsumerGroup // consumer groups (nil until first group is added)
 }
 
 // NewQueue creates a new queue with the given name.
@@ -104,6 +105,10 @@ func (q *Queue) Enqueue(msg *Message) error {
 	}
 	q.messages = append(q.messages, msg)
 	q.tryDeliver()
+	// Fan out to all consumer groups
+	for _, g := range q.groups {
+		g.Enqueue(msg)
+	}
 	return nil
 }
 
@@ -114,6 +119,9 @@ func (q *Queue) EnqueueDirect(msg *Message) {
 	defer q.mu.Unlock()
 	q.messages = append(q.messages, msg)
 	q.tryDeliver()
+	for _, g := range q.groups {
+		g.Enqueue(msg)
+	}
 }
 
 // tryDeliver attempts to deliver messages to consumers. Must be called with lock held.
@@ -305,7 +313,6 @@ func (q *Queue) InFlightLen() int {
 // RequeueExpired moves expired in-flight messages back to the queue.
 func (q *Queue) RequeueExpired() {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 	now := time.Now()
 	for id, msg := range q.inFlight {
 		if msg.VisibleAt.Before(now) {
@@ -315,6 +322,75 @@ func (q *Queue) RequeueExpired() {
 		}
 	}
 	q.tryDeliver()
+	groups := make([]*ConsumerGroup, 0, len(q.groups))
+	for _, g := range q.groups {
+		groups = append(groups, g)
+	}
+	q.mu.Unlock()
+	for _, g := range groups {
+		g.RequeueExpired()
+	}
+}
+
+// GetOrCreateGroup returns the consumer group with the given name, creating it if needed.
+func (q *Queue) GetOrCreateGroup(groupName string) *ConsumerGroup {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.groups == nil {
+		q.groups = make(map[string]*ConsumerGroup)
+	}
+	g, ok := q.groups[groupName]
+	if !ok {
+		g = NewConsumerGroup(groupName, q.name)
+		q.groups[groupName] = g
+	}
+	return g
+}
+
+// GetGroup returns the consumer group with the given name, or nil.
+func (q *Queue) GetGroup(groupName string) *ConsumerGroup {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.groups == nil {
+		return nil
+	}
+	return q.groups[groupName]
+}
+
+// RemoveGroup removes a consumer group from the queue.
+func (q *Queue) RemoveGroup(groupName string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.groups, groupName)
+}
+
+// RequeueExpiredGroups requeues expired in-flight messages in all groups.
+func (q *Queue) RequeueExpiredGroups() {
+	q.mu.Lock()
+	groups := make([]*ConsumerGroup, 0, len(q.groups))
+	for _, g := range q.groups {
+		groups = append(groups, g)
+	}
+	q.mu.Unlock()
+	for _, g := range groups {
+		g.RequeueExpired()
+	}
+}
+
+// ReapDeadGroupMembers checks all groups for dead members. Returns removed member IDs.
+func (q *Queue) ReapDeadGroupMembers() []string {
+	q.mu.Lock()
+	groups := make([]*ConsumerGroup, 0, len(q.groups))
+	for _, g := range q.groups {
+		groups = append(groups, g)
+	}
+	q.mu.Unlock()
+
+	var dead []string
+	for _, g := range groups {
+		dead = append(dead, g.ReapDeadMembers()...)
+	}
+	return dead
 }
 
 // ExtendVisibility extends the visibility timeout for an in-flight message.
@@ -328,4 +404,33 @@ func (q *Queue) ExtendVisibility(messageID string, extension time.Duration) time
 	}
 	msg.VisibleAt = time.Now().Add(extension)
 	return msg.VisibleAt
+}
+
+// ConsumerCount returns the number of active consumers.
+func (q *Queue) ConsumerCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.consumers)
+}
+
+// Peek returns up to n messages from the head of the queue without removing them.
+func (q *Queue) Peek(n int) []*Message {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if n > len(q.messages) {
+		n = len(q.messages)
+	}
+	result := make([]*Message, n)
+	copy(result, q.messages[:n])
+	return result
+}
+
+// Purge removes all messages from the queue and returns the count removed.
+func (q *Queue) Purge() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	count := len(q.messages) + len(q.inFlight)
+	q.messages = nil
+	q.inFlight = make(map[string]*Message)
+	return count
 }
