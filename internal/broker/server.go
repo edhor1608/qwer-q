@@ -85,6 +85,7 @@ func (s *Server) Close() error {
 // connState tracks per-connection state.
 type connState struct {
 	queueName   string
+	groupName   string // consumer group name (empty for legacy)
 	clientAddr  string
 	msgCh       <-chan *Message
 	stopCh      chan struct{}
@@ -111,7 +112,17 @@ func (s *Server) handleConn(conn net.Conn) {
 		if state.msgCh != nil {
 			q := s.broker.GetQueue(state.queueName)
 			if q != nil {
-				q.RemoveConsumer(state.msgCh)
+				if state.groupName != "" {
+					g := q.GetGroup(state.groupName)
+					if g != nil {
+						empty := g.RemoveMember(clientAddr)
+						if empty {
+							q.RemoveGroup(state.groupName)
+						}
+					}
+				} else {
+					q.RemoveConsumer(state.msgCh)
+				}
 			}
 		}
 		if state.callManager != nil {
@@ -157,6 +168,10 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 		return s.handleSchemaList()
 	case protocol.OpQueueList:
 		return s.handleQueueList()
+	case protocol.OpHeartbeat:
+		return s.handleHeartbeat(frame.Payload, state)
+	case protocol.OpUnsubscribe:
+		return s.handleUnsubscribe(frame.Payload, state)
 	case protocol.OpCall:
 		return s.handleCall(frame.Payload, state)
 	default:
@@ -202,7 +217,8 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 	}
 
 	state.queueName = req.GetQueue()
-	state.msgCh = s.broker.HandleConsume(&req)
+	state.groupName = req.GetGroup()
+	state.msgCh = s.broker.HandleConsume(&req, state.clientAddr)
 
 	// Start delivery goroutine
 	state.deliverWg.Add(1)
@@ -244,7 +260,7 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 		return EncodeError(2, "invalid request")
 	}
 
-	if !s.broker.HandleAck(&req, state.queueName) {
+	if !s.broker.HandleAck(&req, state.queueName, state.groupName) {
 		return EncodeError(4, "message not found")
 	}
 
@@ -264,7 +280,7 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 		return EncodeError(2, "invalid request")
 	}
 
-	if !s.broker.HandleNack(&req, state.queueName) {
+	if !s.broker.HandleNack(&req, state.queueName, state.groupName) {
 		return EncodeError(4, "message not found")
 	}
 
@@ -369,6 +385,37 @@ func (s *Server) handleQueueList() []byte {
 	resp := &protocol.QueueListResponse{Queues: queues}
 	data, _ := proto.Marshal(resp)
 	return protocol.EncodeFrame(protocol.OpQueueListResp, data)
+}
+
+func (s *Server) handleHeartbeat(payload []byte, state *connState) []byte {
+	var req protocol.HeartbeatRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	if !s.broker.HandleHeartbeat(&req, state.clientAddr) {
+		return EncodeError(4, "group member not found")
+	}
+
+	resp := &protocol.HeartbeatResponse{}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpHeartbeatAck, data)
+}
+
+func (s *Server) handleUnsubscribe(payload []byte, state *connState) []byte {
+	var req protocol.UnsubscribeRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		return EncodeError(2, "invalid request")
+	}
+
+	if !s.broker.HandleUnsubscribe(&req, state.clientAddr, state.msgCh) {
+		return EncodeError(4, "consumer not found")
+	}
+
+	// Clear connection state so disconnect cleanup doesn't double-remove
+	state.msgCh = nil
+	state.groupName = ""
+	return nil
 }
 
 func (s *Server) handleCall(payload []byte, state *connState) []byte {

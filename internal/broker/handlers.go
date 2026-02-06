@@ -61,25 +61,46 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 }
 
 // HandleConsume processes a consume request and returns a channel for messages.
-func (b *Broker) HandleConsume(req *protocol.ConsumeRequest) <-chan *Message {
+// If a group name is provided, the consumer joins that group; otherwise legacy behavior.
+func (b *Broker) HandleConsume(req *protocol.ConsumeRequest, memberID string) <-chan *Message {
 	timeout := defaultVisibilityTimeout
 	if req.GetVisibilityTimeout() > 0 {
 		timeout = time.Duration(req.GetVisibilityTimeout()) * time.Second
 	}
 
 	q := b.GetOrCreateQueue(req.GetQueue())
-	return q.Dequeue(timeout)
+
+	groupName := req.GetGroup()
+	if groupName == "" {
+		return q.Dequeue(timeout)
+	}
+
+	g := q.GetOrCreateGroup(groupName)
+	return g.AddMember(memberID, timeout)
 }
 
 // HandleAck processes an ack request.
-func (b *Broker) HandleAck(req *protocol.AckRequest, queueName string) bool {
+// If groupName is non-empty, ack within that group instead of the queue's ungrouped consumers.
+func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string) bool {
 	q := b.GetQueue(queueName)
 	if q == nil {
 		return false
 	}
-	if !q.Ack(req.GetMessageId()) {
-		return false
+
+	if groupName != "" {
+		g := q.GetGroup(groupName)
+		if g == nil {
+			return false
+		}
+		if !g.Ack(req.GetMessageId()) {
+			return false
+		}
+	} else {
+		if !q.Ack(req.GetMessageId()) {
+			return false
+		}
 	}
+
 	if b.storage != nil {
 		b.storage.DeleteMessage(req.GetMessageId())
 	}
@@ -87,10 +108,22 @@ func (b *Broker) HandleAck(req *protocol.AckRequest, queueName string) bool {
 }
 
 // HandleNack processes a nack request.
-func (b *Broker) HandleNack(req *protocol.NackRequest, queueName string) bool {
+// If groupName is non-empty, nack within that group.
+func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName string) bool {
 	q := b.GetQueue(queueName)
 	if q == nil {
 		return false
+	}
+
+	if groupName != "" {
+		g := q.GetGroup(groupName)
+		if g == nil {
+			return false
+		}
+		if !g.Nack(req.GetMessageId(), req.GetRequeue()) {
+			return false
+		}
+		return true
 	}
 
 	result := q.Nack(req.GetMessageId(), req.GetRequeue())
@@ -129,6 +162,48 @@ func (b *Broker) HandleExtendVisibility(req *protocol.ExtendVisibilityRequest, q
 		return time.Time{}, false
 	}
 	return newVisibleAt, true
+}
+
+// HandleHeartbeat processes a heartbeat from a group member.
+func (b *Broker) HandleHeartbeat(req *protocol.HeartbeatRequest, memberID string) bool {
+	q := b.GetQueue(req.GetQueue())
+	if q == nil {
+		return false
+	}
+	g := q.GetGroup(req.GetGroup())
+	if g == nil {
+		return false
+	}
+	return g.Heartbeat(memberID)
+}
+
+// HandleUnsubscribe removes a consumer from a queue/group.
+// Returns true if the consumer was found and removed.
+func (b *Broker) HandleUnsubscribe(req *protocol.UnsubscribeRequest, memberID string, msgCh <-chan *Message) bool {
+	q := b.GetQueue(req.GetQueue())
+	if q == nil {
+		return false
+	}
+
+	groupName := req.GetGroup()
+	if groupName != "" {
+		g := q.GetGroup(groupName)
+		if g == nil {
+			return false
+		}
+		empty := g.RemoveMember(memberID)
+		if empty {
+			q.RemoveGroup(groupName)
+		}
+		return true
+	}
+
+	// Legacy: remove ungrouped consumer
+	if msgCh != nil {
+		q.RemoveConsumer(msgCh)
+		return true
+	}
+	return false
 }
 
 // MessageToProto converts an internal Message to protocol Message.

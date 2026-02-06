@@ -13,6 +13,8 @@ const (
 	OpAck              OpCode = 0x05
 	OpNack             OpCode = 0x06
 	OpExtendVisibility OpCode = 0x08
+	OpHeartbeat        OpCode = 0x0A
+	OpUnsubscribe      OpCode = 0x0B
 	OpSchemaRegister   OpCode = 0x10
 	OpSchemaGet        OpCode = 0x11
 	OpCall             OpCode = 0x20
@@ -24,6 +26,7 @@ const (
 	OpMessage             OpCode = 0x04
 	OpError               OpCode = 0x07
 	OpExtendVisibilityAck OpCode = 0x09
+	OpHeartbeatAck        OpCode = 0x0C
 	OpSchemaResponse      OpCode = 0x12
 	OpCallResponse        OpCode = 0x21
 )
@@ -46,6 +49,9 @@ var opCodeNames = map[OpCode]string{
 	OpError:               "ERROR",
 	OpExtendVisibility:    "EXTEND_VISIBILITY",
 	OpExtendVisibilityAck: "EXTEND_VISIBILITY_ACK",
+	OpHeartbeat:           "HEARTBEAT",
+	OpUnsubscribe:         "UNSUBSCRIBE",
+	OpHeartbeatAck:        "HEARTBEAT_ACK",
 	OpSchemaRegister:      "SCHEMA_REGISTER",
 	OpSchemaGet:           "SCHEMA_GET",
 	OpSchemaResponse:      "SCHEMA_RESPONSE",
