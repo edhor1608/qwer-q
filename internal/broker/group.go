@@ -167,23 +167,39 @@ func (g *ConsumerGroup) Ack(messageID string) bool {
 }
 
 // Nack negatively acknowledges a message within this group.
-func (g *ConsumerGroup) Nack(messageID string, requeue bool) bool {
+// Returns a NackResult so the caller can handle DLQ if needed.
+func (g *ConsumerGroup) Nack(messageID string, requeue bool, maxRetries uint32, policy FailurePolicy) NackResult {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	entry, ok := g.inFlight[messageID]
 	if !ok {
-		return false
+		return NackResult{Found: false}
 	}
 	delete(g.inFlight, messageID)
+	msg := entry.msg
 
-	if requeue {
-		entry.msg.VisibleAt = time.Now()
-		g.messages = append(g.messages, entry.msg)
-		g.tryDeliver()
+	if !requeue {
+		if policy == FailurePolicyDLQ {
+			return NackResult{Found: true, Message: msg, ToDLQ: true}
+		}
+		return NackResult{Found: true, Message: msg, ToDLQ: false}
 	}
 
-	return true
+	// Check max retries
+	if policy != FailurePolicyInfinite && msg.Attempt >= maxRetries {
+		switch policy {
+		case FailurePolicyDLQ:
+			return NackResult{Found: true, Message: msg, ToDLQ: true}
+		case FailurePolicyDrop:
+			return NackResult{Found: true, Message: msg, ToDLQ: false}
+		}
+	}
+
+	msg.VisibleAt = time.Now()
+	g.messages = append(g.messages, msg)
+	g.tryDeliver()
+	return NackResult{Found: true, Message: msg, ToDLQ: false}
 }
 
 // Heartbeat updates the last heartbeat time for a member.
@@ -224,6 +240,7 @@ func (g *ConsumerGroup) ReapDeadMembers() []string {
 		g.nextIdx = 0
 	}
 
+	g.tryDeliver()
 	return dead
 }
 

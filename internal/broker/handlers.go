@@ -120,8 +120,20 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 		if g == nil {
 			return false
 		}
-		if !g.Nack(req.GetMessageId(), req.GetRequeue()) {
+		result := g.Nack(req.GetMessageId(), req.GetRequeue(), q.MaxRetries(), q.FailurePolicy())
+		if !result.Found {
 			return false
+		}
+		if result.ToDLQ && result.Message != nil {
+			dlqName := DLQName(queueName)
+			dlq := b.GetOrCreateQueue(dlqName)
+			result.Message.Queue = dlqName
+			result.Message.VisibleAt = time.Now()
+			dlq.Enqueue(result.Message)
+			if b.storage != nil {
+				b.storage.DeleteMessage(result.Message.ID)
+				b.storage.SaveMessage(result.Message)
+			}
 		}
 		return true
 	}

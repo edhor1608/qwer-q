@@ -153,7 +153,8 @@ func TestGroupNack(t *testing.T) {
 	<-ch
 
 	// Nack with requeue
-	if !g.Nack(msg.ID, true) {
+	result := g.Nack(msg.ID, true, DefaultMaxRetries, FailurePolicyDLQ)
+	if !result.Found {
 		t.Fatal("nack failed")
 	}
 
