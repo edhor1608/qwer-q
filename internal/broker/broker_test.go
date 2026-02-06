@@ -352,7 +352,7 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 
 	// Ack
 	ackReq := &protocol.AckRequest{MessageId: msgID}
-	if !b.HandleAck(ackReq, "ack-queue") {
+	if !b.HandleAck(ackReq, "ack-queue", "") {
 		t.Fatal("ack failed")
 	}
 
