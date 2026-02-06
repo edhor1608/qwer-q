@@ -81,6 +81,7 @@ export class TypedClient {
         };
 
         await handler(typed);
+        this.conn.ack(msg.messageId);
       },
       options,
     );

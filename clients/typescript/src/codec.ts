@@ -30,7 +30,8 @@ function decodeVarint(buf: Buffer, offset: number): [bigint, number] {
   let result = 0n;
   let shift = 0n;
   let pos = offset;
-  while (pos < buf.length) {
+  const maxBytes = 10; // protobuf varints are at most 10 bytes
+  while (pos < buf.length && pos - offset < maxBytes) {
     const b = buf[pos]!;
     result |= BigInt(b & 0x7f) << shift;
     pos++;

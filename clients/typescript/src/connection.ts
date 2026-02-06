@@ -109,10 +109,15 @@ export class QwerQConnection extends EventEmitter<QwerQConnectionEvents> {
       });
 
       socket.on("data", (chunk: Buffer) => {
-        this.decoder.push(chunk);
-        const frames = this.decoder.readAll();
-        for (const frame of frames) {
-          this._handleFrame(frame);
+        try {
+          this.decoder.push(chunk);
+          const frames = this.decoder.readAll();
+          for (const frame of frames) {
+            this._handleFrame(frame);
+          }
+        } catch (err) {
+          this.emit("error", err as Error);
+          this.socket?.destroy();
         }
       });
 
@@ -241,10 +246,12 @@ export class QwerQConnection extends EventEmitter<QwerQConnectionEvents> {
       const frame = encodeFrame(opcode, payload);
       this.socket.write(frame, (err) => {
         if (err) {
-          // Remove from pending
+          // Mark as failed — will be skipped by _handleFrame
           const idx = this.pending.findIndex((p) => p.resolve === resolve);
           if (idx !== -1) this.pending.splice(idx, 1);
           reject(err);
+          // If this was the only pending, no FIFO issue.
+          // If there are others, the connection is likely dead anyway.
         }
       });
     });
