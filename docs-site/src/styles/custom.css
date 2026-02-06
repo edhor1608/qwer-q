@@ -1,0 +1,35 @@
+/* QWER-Q brand: electric amber (#f5a623) accent, dark mode default */
+
+:root {
+	--sl-color-accent-low: #3d2a06;
+	--sl-color-accent: #f5a623;
+	--sl-color-accent-high: #fde8c4;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #eee;
+	--sl-color-gray-2: #c2c2c2;
+	--sl-color-gray-3: #8b8b8b;
+	--sl-color-gray-4: #585858;
+	--sl-color-gray-5: #383838;
+	--sl-color-gray-6: #272727;
+	--sl-color-black: #181818;
+}
+
+[data-theme='light'],
+:root[data-theme='light'] {
+	--sl-color-accent-low: #fef3dc;
+	--sl-color-accent: #c47d0a;
+	--sl-color-accent-high: #3d2a06;
+	--sl-color-white: #181818;
+	--sl-color-gray-1: #272727;
+	--sl-color-gray-2: #383838;
+	--sl-color-gray-3: #585858;
+	--sl-color-gray-4: #8b8b8b;
+	--sl-color-gray-5: #c2c2c2;
+	--sl-color-gray-6: #eee;
+	--sl-color-black: #ffffff;
+}
+
+/* Dark mode by default (prefers-color-scheme) */
+starlight-theme-select {
+	--sl-color-accent: #f5a623;
+}
