@@ -11,6 +11,7 @@ message PublishRequest {
   map<string, string> headers = 3;
   optional string message_id = 4;      // Client-provided, or broker generates
   optional string idempotency_key = 5; // For deduplication
+  string ordering_key = 6;             // Optional: messages with same key go to same consumer
 }
 
 // PublishResponse confirms a publish.
@@ -33,6 +34,7 @@ message Message {
   map<string, string> headers = 4;
   uint32 attempt = 5;           // Delivery attempt number (1-based)
   int64 published_at = 6;       // Unix timestamp millis
+  string ordering_key = 7;      // Ordering key (if set during publish)
 }
 
 // AckRequest acknowledges a message.
