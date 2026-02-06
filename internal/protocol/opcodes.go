@@ -28,6 +28,19 @@ const (
 	OpCallResponse        OpCode = 0x21
 )
 
+// Stream operations (client -> server)
+const (
+	OpSeek         OpCode = 0x0A
+	OpCommitOffset OpCode = 0x0B
+)
+
+// Stream operations (server -> client)
+const (
+	OpSeekAck         OpCode = 0x0C
+	OpCommitOffsetAck OpCode = 0x0D
+	OpStreamMessage   OpCode = 0x0E
+)
+
 // Admin operations
 const (
 	OpSchemaList     OpCode = 0x30
@@ -46,6 +59,11 @@ var opCodeNames = map[OpCode]string{
 	OpError:               "ERROR",
 	OpExtendVisibility:    "EXTEND_VISIBILITY",
 	OpExtendVisibilityAck: "EXTEND_VISIBILITY_ACK",
+	OpSeek:                "SEEK",
+	OpCommitOffset:        "COMMIT_OFFSET",
+	OpSeekAck:             "SEEK_ACK",
+	OpCommitOffsetAck:     "COMMIT_OFFSET_ACK",
+	OpStreamMessage:       "STREAM_MESSAGE",
 	OpSchemaRegister:      "SCHEMA_REGISTER",
 	OpSchemaGet:           "SCHEMA_GET",
 	OpSchemaResponse:      "SCHEMA_RESPONSE",
