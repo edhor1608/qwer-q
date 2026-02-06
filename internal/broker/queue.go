@@ -357,3 +357,32 @@ func (q *Queue) ExtendVisibility(messageID string, extension time.Duration) time
 	msg.VisibleAt = time.Now().Add(extension)
 	return msg.VisibleAt
 }
+
+// ConsumerCount returns the number of active consumers.
+func (q *Queue) ConsumerCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.consumers)
+}
+
+// Peek returns up to n messages from the head of the queue without removing them.
+func (q *Queue) Peek(n int) []*Message {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if n > len(q.messages) {
+		n = len(q.messages)
+	}
+	result := make([]*Message, n)
+	copy(result, q.messages[:n])
+	return result
+}
+
+// Purge removes all messages from the queue and returns the count removed.
+func (q *Queue) Purge() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	count := len(q.messages) + len(q.inFlight)
+	q.messages = nil
+	q.inFlight = make(map[string]*Message)
+	return count
+}

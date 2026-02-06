@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"crypto/subtle"
 	"io"
 	"net"
 	"sync"
@@ -13,12 +14,13 @@ import (
 
 // Server is a TCP server for the broker.
 type Server struct {
-	broker   *Broker
-	registry *schema.Registry
-	listener net.Listener
-	wg       sync.WaitGroup
-	done     chan struct{}
-	ready    chan struct{} // closed when server is listening
+	broker    *Broker
+	registry  *schema.Registry
+	listener  net.Listener
+	wg        sync.WaitGroup
+	done      chan struct{}
+	ready     chan struct{} // closed when server is listening
+	authToken string       // if set, clients must authenticate before any other operation
 }
 
 // NewServer creates a new server with the given broker.
@@ -29,6 +31,12 @@ func NewServer(broker *Broker) *Server {
 		done:     make(chan struct{}),
 		ready:    make(chan struct{}),
 	}
+}
+
+// SetAuthToken configures the required auth token. When set, clients must
+// send OpAuth with a matching token as their first message.
+func (s *Server) SetAuthToken(token string) {
+	s.authToken = token
 }
 
 // Registry returns the schema registry.
@@ -84,14 +92,15 @@ func (s *Server) Close() error {
 
 // connState tracks per-connection state.
 type connState struct {
-	queueName   string
-	groupName   string // consumer group name (empty for legacy)
-	clientAddr  string
-	msgCh       <-chan *Message
-	stopCh      chan struct{}
-	deliverWg   sync.WaitGroup
-	writeMu     sync.Mutex
-	callManager *CallManager
+	queueName     string
+	groupName     string // consumer group name (empty for legacy)
+	clientAddr    string
+	msgCh         <-chan *Message
+	stopCh        chan struct{}
+	deliverWg     sync.WaitGroup
+	writeMu       sync.Mutex
+	callManager   *CallManager
+	authenticated bool // true once OpAuth succeeds (or if auth is disabled)
 }
 
 func (s *Server) handleConn(conn net.Conn) {
@@ -102,8 +111,9 @@ func (s *Server) handleConn(conn net.Conn) {
 	LogConnect(clientAddr)
 
 	state := &connState{
-		clientAddr: clientAddr,
-		stopCh:     make(chan struct{}),
+		clientAddr:    clientAddr,
+		stopCh:        make(chan struct{}),
+		authenticated: s.authToken == "", // bypass auth when no token configured
 	}
 	defer func() {
 		LogDisconnect(clientAddr)
@@ -137,6 +147,21 @@ func (s *Server) handleConn(conn net.Conn) {
 				return
 			}
 			return
+		}
+
+		// Auth gate: when auth is required, only OpAuth is allowed before authentication
+		if !state.authenticated {
+			if frame.OpCode != protocol.OpAuth {
+				resp := EncodeError(9, "authentication required")
+				conn.Write(resp)
+				return // disconnect
+			}
+			resp := s.handleAuth(frame.Payload, state)
+			conn.Write(resp)
+			if !state.authenticated {
+				return // auth failed, disconnect
+			}
+			continue
 		}
 
 		resp := s.handleFrame(frame, state, conn)
@@ -439,4 +464,28 @@ func (s *Server) handleCall(payload []byte, state *connState) []byte {
 
 	data, _ := proto.Marshal(resp)
 	return protocol.EncodeFrame(protocol.OpCallResponse, data)
+}
+
+func (s *Server) handleAuth(payload []byte, state *connState) []byte {
+	var req protocol.AuthRequest
+	if err := proto.Unmarshal(payload, &req); err != nil {
+		resp := &protocol.AuthResponse{Success: false, Message: "invalid auth request"}
+		data, _ := proto.Marshal(resp)
+		return protocol.EncodeFrame(protocol.OpAuthResponse, data)
+	}
+
+	tokenBytes := []byte(req.GetToken())
+	expectedBytes := []byte(s.authToken)
+	if subtle.ConstantTimeCompare(tokenBytes, expectedBytes) == 1 {
+		state.authenticated = true
+		logger.Info("client authenticated", "addr", state.clientAddr)
+		resp := &protocol.AuthResponse{Success: true, Message: "authenticated"}
+		data, _ := proto.Marshal(resp)
+		return protocol.EncodeFrame(protocol.OpAuthResponse, data)
+	}
+
+	logger.Warn("authentication failed", "addr", state.clientAddr)
+	resp := &protocol.AuthResponse{Success: false, Message: "invalid token"}
+	data, _ := proto.Marshal(resp)
+	return protocol.EncodeFrame(protocol.OpAuthResponse, data)
 }
