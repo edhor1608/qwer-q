@@ -36,6 +36,12 @@ const (
 	OpQueueListResp  OpCode = 0x33
 )
 
+// Auth operations
+const (
+	OpAuth         OpCode = 0x40
+	OpAuthResponse OpCode = 0x41
+)
+
 var opCodeNames = map[OpCode]string{
 	OpPublish:             "PUBLISH",
 	OpPublishAck:          "PUBLISH_ACK",
@@ -55,6 +61,8 @@ var opCodeNames = map[OpCode]string{
 	OpSchemaListResp:      "SCHEMA_LIST_RESP",
 	OpQueueList:           "QUEUE_LIST",
 	OpQueueListResp:       "QUEUE_LIST_RESP",
+	OpAuth:                "AUTH",
+	OpAuthResponse:        "AUTH_RESPONSE",
 }
 
 func (op OpCode) String() string {

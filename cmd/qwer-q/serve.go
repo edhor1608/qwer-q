@@ -26,6 +26,7 @@ func init() {
 	serveCmd.Flags().String("data-dir", "/data", "data directory for message persistence")
 	serveCmd.Flags().String("max-message-size", "1MB", "maximum message payload size (e.g., 1MB, 512KB)")
 	serveCmd.Flags().Duration("batch-interval", 0, "write batch flush interval (e.g., 5ms). 0 = no batching")
+	serveCmd.Flags().String("auth-token", "", "require clients to authenticate with this token (env: QWERQ_AUTH_TOKEN)")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -35,6 +36,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	maxMsgSize, _ := cmd.Flags().GetString("max-message-size")
 	batchInterval, _ := cmd.Flags().GetDuration("batch-interval")
+	authToken, _ := cmd.Flags().GetString("auth-token")
+	if authToken == "" {
+		authToken = os.Getenv("QWERQ_AUTH_TOKEN")
+	}
 	addr := fmt.Sprintf(":%d", port)
 	metricsAddr := fmt.Sprintf(":%d", metricsPort)
 
@@ -71,6 +76,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	srv := broker.NewServer(b)
+	if authToken != "" {
+		srv.SetAuthToken(authToken)
+	}
 	metricsSrv := broker.NewMetricsServer(metricsAddr)
 
 	// Graceful shutdown
@@ -89,18 +97,22 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Start metrics server
 	go metricsSrv.ListenAndServe()
 
-	printBanner(addr, metricsAddr, version)
+	printBanner(addr, metricsAddr, version, authToken != "")
 
 	return srv.ListenAndServe(addr)
 }
 
-func printBanner(brokerAddr, metricsAddr, ver string) {
+func printBanner(brokerAddr, metricsAddr, ver string, authEnabled bool) {
+	authStatus := "WARNING: Running without authentication - not for production"
+	if authEnabled {
+		authStatus = "Authentication enabled"
+	}
 	fmt.Printf(`
 QWER-Q Message Queue v%s
 Listening on %s (broker), %s (metrics)
-Warning: Running without authentication - not for production
+%s
 
-`, ver, brokerAddr, metricsAddr)
+`, ver, brokerAddr, metricsAddr, authStatus)
 }
 
 // parseSize parses a size string like "1MB", "512KB", "1024" into bytes.
