@@ -123,7 +123,9 @@ func TestAuthRequired_WrongOpcode(t *testing.T) {
 	}
 
 	var errResp protocol.ErrorResponse
-	proto.Unmarshal(frame.Payload, &errResp)
+	if err := proto.Unmarshal(frame.Payload, &errResp); err != nil {
+		t.Fatalf("failed to unmarshal error response: %v", err)
+	}
 	if errResp.Code != 9 {
 		t.Fatalf("expected error code 9, got %d", errResp.Code)
 	}
