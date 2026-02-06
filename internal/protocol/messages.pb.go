@@ -29,6 +29,7 @@ type PublishRequest struct {
 	Headers        map[string]string      `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	MessageId      *string                `protobuf:"bytes,4,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`                // Client-provided, or broker generates
 	IdempotencyKey *string                `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3,oneof" json:"idempotency_key,omitempty"` // For deduplication
+	OrderingKey    string                 `protobuf:"bytes,6,opt,name=ordering_key,json=orderingKey,proto3" json:"ordering_key,omitempty"`                // Optional: messages with same key go to same consumer
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -94,6 +95,13 @@ func (x *PublishRequest) GetMessageId() string {
 func (x *PublishRequest) GetIdempotencyKey() string {
 	if x != nil && x.IdempotencyKey != nil {
 		return *x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *PublishRequest) GetOrderingKey() string {
+	if x != nil {
+		return x.OrderingKey
 	}
 	return ""
 }
@@ -364,6 +372,7 @@ type Message struct {
 	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Attempt       uint32                 `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`                            // Delivery attempt number (1-based)
 	PublishedAt   int64                  `protobuf:"varint,6,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"` // Unix timestamp millis
+	OrderingKey   string                 `protobuf:"bytes,7,opt,name=ordering_key,json=orderingKey,proto3" json:"ordering_key,omitempty"`  // Ordering key (if set during publish)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -438,6 +447,13 @@ func (x *Message) GetPublishedAt() int64 {
 		return x.PublishedAt
 	}
 	return 0
+}
+
+func (x *Message) GetOrderingKey() string {
+	if x != nil {
+		return x.OrderingKey
+	}
+	return ""
 }
 
 // AckRequest acknowledges a message.
@@ -1313,14 +1329,15 @@ var File_proto_qwerq_proto protoreflect.FileDescriptor
 
 const file_proto_qwerq_proto_rawDesc = "" +
 	"\n" +
-	"\x11proto/qwerq.proto\x12\x05qwerq\"\xaf\x02\n" +
+	"\x11proto/qwerq.proto\x12\x05qwerq\"\xd2\x02\n" +
 	"\x0ePublishRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12<\n" +
 	"\aheaders\x18\x03 \x03(\v2\".qwerq.PublishRequest.HeadersEntryR\aheaders\x12\"\n" +
 	"\n" +
 	"message_id\x18\x04 \x01(\tH\x00R\tmessageId\x88\x01\x01\x12,\n" +
-	"\x0fidempotency_key\x18\x05 \x01(\tH\x01R\x0eidempotencyKey\x88\x01\x01\x1a:\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tH\x01R\x0eidempotencyKey\x88\x01\x01\x12!\n" +
+	"\fordering_key\x18\x06 \x01(\tR\vorderingKey\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
@@ -1342,7 +1359,7 @@ const file_proto_qwerq_proto_rawDesc = "" +
 	"\x12UnsubscribeRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x19\n" +
 	"\x05group\x18\x02 \x01(\tH\x00R\x05group\x88\x01\x01B\b\n" +
-	"\x06_group\"\x88\x02\n" +
+	"\x06_group\"\xab\x02\n" +
 	"\aMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12\x14\n" +
@@ -1350,7 +1367,8 @@ const file_proto_qwerq_proto_rawDesc = "" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x125\n" +
 	"\aheaders\x18\x04 \x03(\v2\x1b.qwerq.Message.HeadersEntryR\aheaders\x12\x18\n" +
 	"\aattempt\x18\x05 \x01(\rR\aattempt\x12!\n" +
-	"\fpublished_at\x18\x06 \x01(\x03R\vpublishedAt\x1a:\n" +
+	"\fpublished_at\x18\x06 \x01(\x03R\vpublishedAt\x12!\n" +
+	"\fordering_key\x18\a \x01(\tR\vorderingKey\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"+\n" +

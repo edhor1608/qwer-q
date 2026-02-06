@@ -44,6 +44,7 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		Attempt:     0,
 		PublishedAt: time.Now(),
 		VisibleAt:   time.Now(),
+		OrderingKey: req.GetOrderingKey(),
 	}
 
 	q := b.GetOrCreateQueue(req.GetQueue())
@@ -227,6 +228,7 @@ func MessageToProto(msg *Message) *protocol.Message {
 		Headers:     msg.Headers,
 		Attempt:     msg.Attempt,
 		PublishedAt: msg.PublishedAt.UnixMilli(),
+		OrderingKey: msg.OrderingKey,
 	}
 }
 

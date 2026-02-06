@@ -17,6 +17,7 @@ type Message struct {
 	Attempt     uint32            `json:"attempt"`
 	PublishedAt time.Time         `json:"published_at"`
 	VisibleAt   time.Time         `json:"visible_at"`
+	OrderingKey string            `json:"ordering_key,omitempty"`
 }
 
 var (

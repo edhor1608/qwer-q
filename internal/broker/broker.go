@@ -175,6 +175,7 @@ func (b *Broker) LoadFromStorage() error {
 				Attempt:     sm.Attempt,
 				PublishedAt: sm.PublishedAt,
 				VisibleAt:   sm.VisibleAt,
+				OrderingKey: sm.OrderingKey,
 			}
 			q.EnqueueDirect(msg)
 		}

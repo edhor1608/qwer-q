@@ -2,6 +2,7 @@ package broker
 
 import (
 	"errors"
+	"hash/fnv"
 	"sync"
 	"time"
 )
@@ -23,26 +24,28 @@ type Consumer struct {
 
 // Queue is a thread-safe message queue.
 type Queue struct {
-	mu            sync.Mutex
-	name          string
-	messages      []*Message
-	inFlight      map[string]*Message
-	consumers     []*Consumer
-	nextIdx       int                       // round-robin index
-	maxSize       int                       // maximum number of messages (0 = unlimited)
-	failurePolicy FailurePolicy             // what to do on max retries
-	maxRetries    uint32                    // max delivery attempts before failure policy kicks in
-	groups        map[string]*ConsumerGroup // consumer groups (nil until first group is added)
+	mu             sync.Mutex
+	name           string
+	messages       []*Message
+	inFlight       map[string]*Message
+	consumers      []*Consumer
+	nextIdx        int                       // round-robin index
+	maxSize        int                       // maximum number of messages (0 = unlimited)
+	failurePolicy  FailurePolicy             // what to do on max retries
+	maxRetries     uint32                    // max delivery attempts before failure policy kicks in
+	keyAssignments map[string]*Consumer      // ordering key -> assigned consumer
+	groups         map[string]*ConsumerGroup // consumer groups (nil until first group is added)
 }
 
 // NewQueue creates a new queue with the given name.
 func NewQueue(name string) *Queue {
 	return &Queue{
-		name:          name,
-		inFlight:      make(map[string]*Message),
-		maxSize:       DefaultMaxQueueSize,
-		failurePolicy: FailurePolicyDLQ,
-		maxRetries:    DefaultMaxRetries,
+		name:           name,
+		inFlight:       make(map[string]*Message),
+		maxSize:        DefaultMaxQueueSize,
+		failurePolicy:  FailurePolicyDLQ,
+		maxRetries:     DefaultMaxRetries,
+		keyAssignments: make(map[string]*Consumer),
 	}
 }
 
@@ -136,30 +139,67 @@ func (q *Queue) tryDeliver() {
 		}
 
 		delivered := false
-		// Find a consumer with available channel capacity (round-robin)
-		for j := 0; j < len(q.consumers); j++ {
-			idx := (q.nextIdx + j) % len(q.consumers)
-			c := q.consumers[idx]
 
-			select {
-			case c.Ch <- msg:
-				// Move to in-flight - use proper slice removal to free memory
-				copy(q.messages, q.messages[1:])
-				q.messages = q.messages[:len(q.messages)-1]
-				msg.Attempt++
-				msg.VisibleAt = now.Add(c.VisibilityTimeout)
-				q.inFlight[msg.ID] = msg
-				q.nextIdx = (idx + 1) % len(q.consumers)
-				delivered = true
-				break // Try next message
-			default:
-				// Channel full, try next consumer
-			}
+		if msg.OrderingKey != "" {
+			// Ordering key routing: deliver to assigned consumer
+			delivered = q.deliverOrdered(msg, now)
+		} else {
+			// No ordering key: round-robin delivery
+			delivered = q.deliverRoundRobin(msg, now)
 		}
+
 		if !delivered {
-			return // All consumers full, stop trying
+			return // Target consumer full, stop trying
+		}
+
+		// Move to in-flight - use proper slice removal to free memory
+		copy(q.messages, q.messages[1:])
+		q.messages = q.messages[:len(q.messages)-1]
+		msg.Attempt++
+		q.inFlight[msg.ID] = msg
+	}
+}
+
+// deliverOrdered delivers a message with an ordering key to its assigned consumer.
+// If the key has no assignment, picks a consumer using consistent hashing.
+// Returns true if delivered. Must be called with lock held.
+func (q *Queue) deliverOrdered(msg *Message, now time.Time) bool {
+	c, ok := q.keyAssignments[msg.OrderingKey]
+	if !ok {
+		// Assign using hash for deterministic initial placement
+		h := fnv.New32a()
+		h.Write([]byte(msg.OrderingKey))
+		idx := int(h.Sum32()) % len(q.consumers)
+		c = q.consumers[idx]
+		q.keyAssignments[msg.OrderingKey] = c
+	}
+
+	select {
+	case c.Ch <- msg:
+		msg.VisibleAt = now.Add(c.VisibilityTimeout)
+		return true
+	default:
+		return false // Assigned consumer full, must wait to preserve ordering
+	}
+}
+
+// deliverRoundRobin delivers a message without ordering key using round-robin.
+// Returns true if delivered. Must be called with lock held.
+func (q *Queue) deliverRoundRobin(msg *Message, now time.Time) bool {
+	for j := 0; j < len(q.consumers); j++ {
+		idx := (q.nextIdx + j) % len(q.consumers)
+		c := q.consumers[idx]
+
+		select {
+		case c.Ch <- msg:
+			msg.VisibleAt = now.Add(c.VisibilityTimeout)
+			q.nextIdx = (idx + 1) % len(q.consumers)
+			return true
+		default:
+			// Channel full, try next consumer
 		}
 	}
+	return false
 }
 
 // Dequeue returns a consumer channel for receiving messages.
@@ -179,11 +219,19 @@ func (q *Queue) Dequeue(visibilityTimeout time.Duration) <-chan *Message {
 }
 
 // RemoveConsumer removes a consumer from the queue.
+// Ordering key assignments for this consumer are cleared so they
+// get reassigned to remaining consumers on next delivery.
 func (q *Queue) RemoveConsumer(ch <-chan *Message) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for i, c := range q.consumers {
 		if c.Ch == ch {
+			// Clear ordering key assignments for this consumer
+			for key, assigned := range q.keyAssignments {
+				if assigned == c {
+					delete(q.keyAssignments, key)
+				}
+			}
 			q.consumers = append(q.consumers[:i], q.consumers[i+1:]...)
 			close(c.Ch)
 			return
