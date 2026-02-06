@@ -11,14 +11,29 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Replicator is implemented by cluster.Node to replicate writes via Raft.
+// When nil, the server operates in single-node mode (no replication).
+type Replicator interface {
+	// IsLeader returns true if this node is the Raft leader.
+	IsLeader() bool
+	// ReplicatePublish replicates a publish through Raft consensus.
+	// Returns the message ID assigned by the FSM.
+	ReplicatePublish(queue, messageID string, payload []byte, headers map[string]string, publishedAt time.Time) (string, error)
+	// ReplicateAck replicates an ack through Raft consensus.
+	ReplicateAck(queue, messageID string) error
+	// ReplicateNack replicates a nack through Raft consensus.
+	ReplicateNack(queue, messageID string, requeue bool) error
+}
+
 // Server is a TCP server for the broker.
 type Server struct {
-	broker   *Broker
-	registry *schema.Registry
-	listener net.Listener
-	wg       sync.WaitGroup
-	done     chan struct{}
-	ready    chan struct{} // closed when server is listening
+	broker     *Broker
+	registry   *schema.Registry
+	replicator Replicator
+	listener   net.Listener
+	wg         sync.WaitGroup
+	done       chan struct{}
+	ready      chan struct{} // closed when server is listening
 }
 
 // NewServer creates a new server with the given broker.
@@ -29,6 +44,12 @@ func NewServer(broker *Broker) *Server {
 		done:     make(chan struct{}),
 		ready:    make(chan struct{}),
 	}
+}
+
+// SetReplicator configures a Replicator for clustered operation.
+// When set, write operations are replicated via Raft before being applied.
+func (s *Server) SetReplicator(r Replicator) {
+	s.replicator = r
 }
 
 // Registry returns the schema registry.
@@ -177,6 +198,39 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 		return EncodeError(5, "schema validation failed: "+err.Error())
 	}
 
+	// Clustered mode: replicate through Raft before applying locally.
+	// The FSM.Apply on each node handles the actual enqueue + storage.
+	if s.replicator != nil {
+		if !s.replicator.IsLeader() {
+			return EncodeError(9, "not leader")
+		}
+
+		msgID := req.GetMessageId()
+		if msgID == "" {
+			msgID = NewULID()
+		}
+
+		replicatedID, err := s.replicator.ReplicatePublish(
+			req.GetQueue(), msgID, req.GetPayload(), req.GetHeaders(), time.Now(),
+		)
+		if err != nil {
+			LogError("replicated publish failed", err, "queue", req.GetQueue(), "client", clientAddr)
+			return EncodeError(3, err.Error())
+		}
+
+		resp := &protocol.PublishResponse{MessageId: replicatedID}
+		LogPublish(req.GetQueue(), replicatedID, clientAddr)
+		q := s.broker.GetQueue(req.GetQueue())
+		RecordPublish(req.GetQueue(), time.Since(start).Seconds())
+		if q != nil {
+			UpdateQueueDepth(req.GetQueue(), q.Len())
+			UpdateInFlightCount(req.GetQueue(), q.InFlightLen())
+		}
+		data, _ := proto.Marshal(resp)
+		return protocol.EncodeFrame(protocol.OpPublishAck, data)
+	}
+
+	// Single-node mode: apply directly.
 	resp, err := s.broker.HandlePublish(&req)
 	if err != nil {
 		LogError("publish failed", err, "queue", req.GetQueue(), "client", clientAddr)
@@ -244,8 +298,20 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 		return EncodeError(2, "invalid request")
 	}
 
-	if !s.broker.HandleAck(&req, state.queueName) {
-		return EncodeError(4, "message not found")
+	// Clustered mode: replicate ack through Raft.
+	if s.replicator != nil {
+		if !s.replicator.IsLeader() {
+			return EncodeError(9, "not leader")
+		}
+		if err := s.replicator.ReplicateAck(state.queueName, req.GetMessageId()); err != nil {
+			LogError("replicated ack failed", err, "queue", state.queueName)
+			return EncodeError(3, err.Error())
+		}
+	} else {
+		// Single-node mode
+		if !s.broker.HandleAck(&req, state.queueName) {
+			return EncodeError(4, "message not found")
+		}
 	}
 
 	LogAck(state.queueName, req.GetMessageId(), state.clientAddr)
@@ -264,8 +330,20 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 		return EncodeError(2, "invalid request")
 	}
 
-	if !s.broker.HandleNack(&req, state.queueName) {
-		return EncodeError(4, "message not found")
+	// Clustered mode: replicate nack through Raft.
+	if s.replicator != nil {
+		if !s.replicator.IsLeader() {
+			return EncodeError(9, "not leader")
+		}
+		if err := s.replicator.ReplicateNack(state.queueName, req.GetMessageId(), req.GetRequeue()); err != nil {
+			LogError("replicated nack failed", err, "queue", state.queueName)
+			return EncodeError(3, err.Error())
+		}
+	} else {
+		// Single-node mode
+		if !s.broker.HandleNack(&req, state.queueName) {
+			return EncodeError(4, "message not found")
+		}
 	}
 
 	LogNack(state.queueName, req.GetMessageId(), state.clientAddr, req.GetRequeue())
