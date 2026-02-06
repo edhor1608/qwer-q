@@ -110,7 +110,7 @@ func (b *Broker) memoryMonitor() {
 	}
 }
 
-// reaper periodically checks for expired in-flight messages.
+// reaper periodically checks for expired in-flight messages and dead group members.
 func (b *Broker) reaper() {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -120,6 +120,13 @@ func (b *Broker) reaper() {
 			b.mu.RLock()
 			for _, q := range b.queues {
 				q.RequeueExpired()
+				dead := q.ReapDeadGroupMembers()
+				for _, memberID := range dead {
+					logger.Info("group member timed out",
+						"queue", q.Name(),
+						"member", memberID,
+					)
+				}
 			}
 			b.mu.RUnlock()
 		case <-b.done:
