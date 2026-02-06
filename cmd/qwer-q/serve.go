@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jonas/qwer-q/internal/api"
 	"github.com/jonas/qwer-q/internal/broker"
+	"github.com/jonas/qwer-q/internal/cluster"
 	"github.com/jonas/qwer-q/internal/protocol"
 	"github.com/jonas/qwer-q/internal/storage"
 	"github.com/spf13/cobra"
@@ -28,6 +31,15 @@ func init() {
 	serveCmd.Flags().String("max-message-size", "1MB", "maximum message payload size (e.g., 1MB, 512KB)")
 	serveCmd.Flags().Duration("batch-interval", 0, "write batch flush interval (e.g., 5ms). 0 = no batching")
 	serveCmd.Flags().String("auth-token", "", "require clients to authenticate with this token (env: QWERQ_AUTH_TOKEN)")
+
+	// Clustering flags
+	serveCmd.Flags().String("cluster-node-id", "", "unique node ID for clustering (enables cluster mode)")
+	serveCmd.Flags().String("cluster-bind", "0.0.0.0:9878", "address for Raft communication")
+	serveCmd.Flags().String("cluster-advertise", "", "address advertised to peers (defaults to cluster-bind)")
+	serveCmd.Flags().StringSlice("cluster-peers", nil, "initial cluster peers (format: id=host:port)")
+	serveCmd.Flags().String("cluster-data-dir", "", "Raft data directory (defaults to data-dir/raft)")
+	serveCmd.Flags().Bool("cluster-bootstrap", false, "bootstrap a new cluster (use on first start only)")
+
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -86,6 +98,43 @@ func runServe(cmd *cobra.Command, args []string) error {
 	apiHandler := api.New(b, srv.Registry())
 	apiHandler.Register(metricsSrv.Mux())
 
+	// Clustering setup (opt-in via --cluster-node-id)
+	clusterNodeID, _ := cmd.Flags().GetString("cluster-node-id")
+	var clusterNode *cluster.Node
+
+	if clusterNodeID != "" {
+		clusterBind, _ := cmd.Flags().GetString("cluster-bind")
+		clusterAdvertise, _ := cmd.Flags().GetString("cluster-advertise")
+		clusterPeers, _ := cmd.Flags().GetStringSlice("cluster-peers")
+		clusterDataDir, _ := cmd.Flags().GetString("cluster-data-dir")
+		clusterBootstrap, _ := cmd.Flags().GetBool("cluster-bootstrap")
+
+		if clusterDataDir == "" {
+			clusterDataDir = dataDir + "/raft"
+		}
+
+		clusterLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+		cfg := cluster.Config{
+			NodeID:        clusterNodeID,
+			BindAddr:      clusterBind,
+			AdvertiseAddr: clusterAdvertise,
+			DataDir:       clusterDataDir,
+			Peers:         clusterPeers,
+			Bootstrap:     clusterBootstrap,
+		}
+
+		var err error
+		clusterNode, err = cluster.NewNode(cfg, b, clusterLogger)
+		if err != nil {
+			return fmt.Errorf("failed to start cluster node: %w", err)
+		}
+		srv.SetReplicator(clusterNode)
+
+		fmt.Printf("Cluster mode: node=%s bind=%s peers=%s\n",
+			clusterNodeID, clusterBind, strings.Join(clusterPeers, ","))
+	}
+
 	// Graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -93,6 +142,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	go func() {
 		<-sigCh
 		fmt.Println("\nShutting down...")
+		if clusterNode != nil {
+			clusterNode.Close()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		metricsSrv.Shutdown(ctx)
