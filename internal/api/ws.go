@@ -66,7 +66,13 @@ func (hub *wsHub) broadcast(event wsEvent) {
 func (h *Handler) startWSBroadcast() {
 	ticker := time.NewTicker(time.Second)
 	go func() {
-		for range ticker.C {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-h.done:
+				return
+			case <-ticker.C:
+			}
 			h.hub.mu.RLock()
 			count := len(h.hub.clients)
 			h.hub.mu.RUnlock()

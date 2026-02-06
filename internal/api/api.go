@@ -19,13 +19,19 @@ type Handler struct {
 	broker   *broker.Broker
 	registry *schema.Registry
 	hub      *wsHub
+	done     chan struct{}
 }
 
 // New creates a new API handler.
 func New(b *broker.Broker, r *schema.Registry) *Handler {
-	h := &Handler{broker: b, registry: r, hub: newWSHub()}
+	h := &Handler{broker: b, registry: r, hub: newWSHub(), done: make(chan struct{})}
 	h.startWSBroadcast()
 	return h
+}
+
+// Close stops the WebSocket broadcast goroutine.
+func (h *Handler) Close() {
+	close(h.done)
 }
 
 // Register adds all API routes to the given mux.
@@ -217,20 +223,23 @@ func (h *Handler) handleDLQRetry(w http.ResponseWriter, _ *http.Request, name st
 		return
 	}
 
-	// Move all DLQ messages back to the original queue
+	// Move all DLQ messages back to the original queue (copy to avoid mutating originals)
 	msgs := dlq.Peek(dlq.Len())
 	q := h.broker.GetOrCreateQueue(name)
 	retried := 0
 	for _, msg := range msgs {
-		msg.Queue = name
-		msg.Attempt = 0
-		msg.VisibleAt = time.Now()
-		if err := q.Enqueue(msg); err == nil {
+		copy := *msg
+		copy.Queue = name
+		copy.Attempt = 0
+		copy.VisibleAt = time.Now()
+		if err := q.Enqueue(&copy); err == nil {
 			retried++
 		}
 	}
-	// Purge the DLQ after moving messages
-	dlq.Purge()
+	// Only purge DLQ if all messages were successfully moved
+	if retried == len(msgs) {
+		dlq.Purge()
+	}
 	writeJSON(w, http.StatusOK, map[string]int{"retried": retried})
 }
 
