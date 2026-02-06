@@ -82,6 +82,7 @@ type PublishRequest struct {
 	Headers        map[string]string      `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	MessageId      *string                `protobuf:"bytes,4,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`                // Client-provided, or broker generates
 	IdempotencyKey *string                `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3,oneof" json:"idempotency_key,omitempty"` // For deduplication
+	OrderingKey    string                 `protobuf:"bytes,6,opt,name=ordering_key,json=orderingKey,proto3" json:"ordering_key,omitempty"`                // Optional: messages with same key go to same consumer
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -151,6 +152,13 @@ func (x *PublishRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *PublishRequest) GetOrderingKey() string {
+	if x != nil {
+		return x.OrderingKey
+	}
+	return ""
+}
+
 // PublishResponse confirms a publish.
 type PublishResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -202,6 +210,7 @@ type ConsumeRequest struct {
 	Queue             string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
 	Prefetch          uint32                 `protobuf:"varint,2,opt,name=prefetch,proto3" json:"prefetch,omitempty"`                                            // Max unacked messages (default 1)
 	VisibilityTimeout uint32                 `protobuf:"varint,3,opt,name=visibility_timeout,json=visibilityTimeout,proto3" json:"visibility_timeout,omitempty"` // Seconds before redelivery (default 30)
+	Group             *string                `protobuf:"bytes,4,opt,name=group,proto3,oneof" json:"group,omitempty"`                                             // Consumer group name (omit for simple competing consumers)
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -257,6 +266,156 @@ func (x *ConsumeRequest) GetVisibilityTimeout() uint32 {
 	return 0
 }
 
+func (x *ConsumeRequest) GetGroup() string {
+	if x != nil && x.Group != nil {
+		return *x.Group
+	}
+	return ""
+}
+
+// HeartbeatRequest keeps a consumer group member alive.
+type HeartbeatRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	Queue         string                 `protobuf:"bytes,2,opt,name=queue,proto3" json:"queue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatRequest) Reset() {
+	*x = HeartbeatRequest{}
+	mi := &file_proto_qwerq_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatRequest) ProtoMessage() {}
+
+func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
+func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *HeartbeatRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+// HeartbeatResponse confirms the heartbeat.
+type HeartbeatResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatResponse) Reset() {
+	*x = HeartbeatResponse{}
+	mi := &file_proto_qwerq_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatResponse) ProtoMessage() {}
+
+func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
+func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{4}
+}
+
+// UnsubscribeRequest removes a consumer from a queue/group.
+type UnsubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	Group         *string                `protobuf:"bytes,2,opt,name=group,proto3,oneof" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnsubscribeRequest) Reset() {
+	*x = UnsubscribeRequest{}
+	mi := &file_proto_qwerq_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnsubscribeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnsubscribeRequest) ProtoMessage() {}
+
+func (x *UnsubscribeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnsubscribeRequest.ProtoReflect.Descriptor instead.
+func (*UnsubscribeRequest) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UnsubscribeRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *UnsubscribeRequest) GetGroup() string {
+	if x != nil && x.Group != nil {
+		return *x.Group
+	}
+	return ""
+}
+
 // Message is delivered to consumers.
 type Message struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -266,13 +425,14 @@ type Message struct {
 	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Attempt       uint32                 `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`                            // Delivery attempt number (1-based)
 	PublishedAt   int64                  `protobuf:"varint,6,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"` // Unix timestamp millis
+	OrderingKey   string                 `protobuf:"bytes,7,opt,name=ordering_key,json=orderingKey,proto3" json:"ordering_key,omitempty"`  // Ordering key (if set during publish)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_proto_qwerq_proto_msgTypes[3]
+	mi := &file_proto_qwerq_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -284,7 +444,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[3]
+	mi := &file_proto_qwerq_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,7 +457,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{3}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Message) GetMessageId() string {
@@ -342,6 +502,13 @@ func (x *Message) GetPublishedAt() int64 {
 	return 0
 }
 
+func (x *Message) GetOrderingKey() string {
+	if x != nil {
+		return x.OrderingKey
+	}
+	return ""
+}
+
 // AckRequest acknowledges a message.
 type AckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -352,7 +519,7 @@ type AckRequest struct {
 
 func (x *AckRequest) Reset() {
 	*x = AckRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[4]
+	mi := &file_proto_qwerq_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -364,7 +531,7 @@ func (x *AckRequest) String() string {
 func (*AckRequest) ProtoMessage() {}
 
 func (x *AckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[4]
+	mi := &file_proto_qwerq_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -377,7 +544,7 @@ func (x *AckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckRequest.ProtoReflect.Descriptor instead.
 func (*AckRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{4}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AckRequest) GetMessageId() string {
@@ -398,7 +565,7 @@ type NackRequest struct {
 
 func (x *NackRequest) Reset() {
 	*x = NackRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[5]
+	mi := &file_proto_qwerq_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -410,7 +577,7 @@ func (x *NackRequest) String() string {
 func (*NackRequest) ProtoMessage() {}
 
 func (x *NackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[5]
+	mi := &file_proto_qwerq_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -423,7 +590,7 @@ func (x *NackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackRequest.ProtoReflect.Descriptor instead.
 func (*NackRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{5}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *NackRequest) GetMessageId() string {
@@ -451,7 +618,7 @@ type ErrorResponse struct {
 
 func (x *ErrorResponse) Reset() {
 	*x = ErrorResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[6]
+	mi := &file_proto_qwerq_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -463,7 +630,7 @@ func (x *ErrorResponse) String() string {
 func (*ErrorResponse) ProtoMessage() {}
 
 func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[6]
+	mi := &file_proto_qwerq_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -476,7 +643,7 @@ func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
 func (*ErrorResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{6}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ErrorResponse) GetCode() uint32 {
@@ -505,7 +672,7 @@ type SchemaRegisterRequest struct {
 
 func (x *SchemaRegisterRequest) Reset() {
 	*x = SchemaRegisterRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[7]
+	mi := &file_proto_qwerq_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -517,7 +684,7 @@ func (x *SchemaRegisterRequest) String() string {
 func (*SchemaRegisterRequest) ProtoMessage() {}
 
 func (x *SchemaRegisterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[7]
+	mi := &file_proto_qwerq_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -530,7 +697,7 @@ func (x *SchemaRegisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaRegisterRequest.ProtoReflect.Descriptor instead.
 func (*SchemaRegisterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{7}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SchemaRegisterRequest) GetQueue() string {
@@ -565,7 +732,7 @@ type SchemaRegisterResponse struct {
 
 func (x *SchemaRegisterResponse) Reset() {
 	*x = SchemaRegisterResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[8]
+	mi := &file_proto_qwerq_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -577,7 +744,7 @@ func (x *SchemaRegisterResponse) String() string {
 func (*SchemaRegisterResponse) ProtoMessage() {}
 
 func (x *SchemaRegisterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[8]
+	mi := &file_proto_qwerq_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -590,7 +757,7 @@ func (x *SchemaRegisterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaRegisterResponse.ProtoReflect.Descriptor instead.
 func (*SchemaRegisterResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{8}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SchemaRegisterResponse) GetSchemaId() uint32 {
@@ -620,7 +787,7 @@ type CallRequest struct {
 
 func (x *CallRequest) Reset() {
 	*x = CallRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[9]
+	mi := &file_proto_qwerq_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +799,7 @@ func (x *CallRequest) String() string {
 func (*CallRequest) ProtoMessage() {}
 
 func (x *CallRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[9]
+	mi := &file_proto_qwerq_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +812,7 @@ func (x *CallRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallRequest.ProtoReflect.Descriptor instead.
 func (*CallRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{9}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CallRequest) GetQueue() string {
@@ -687,7 +854,7 @@ type CallResponse struct {
 
 func (x *CallResponse) Reset() {
 	*x = CallResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[10]
+	mi := &file_proto_qwerq_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -699,7 +866,7 @@ func (x *CallResponse) String() string {
 func (*CallResponse) ProtoMessage() {}
 
 func (x *CallResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[10]
+	mi := &file_proto_qwerq_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -712,7 +879,7 @@ func (x *CallResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallResponse.ProtoReflect.Descriptor instead.
 func (*CallResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{10}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CallResponse) GetPayload() []byte {
@@ -738,7 +905,7 @@ type SchemaListRequest struct {
 
 func (x *SchemaListRequest) Reset() {
 	*x = SchemaListRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[11]
+	mi := &file_proto_qwerq_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +917,7 @@ func (x *SchemaListRequest) String() string {
 func (*SchemaListRequest) ProtoMessage() {}
 
 func (x *SchemaListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[11]
+	mi := &file_proto_qwerq_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +930,7 @@ func (x *SchemaListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaListRequest.ProtoReflect.Descriptor instead.
 func (*SchemaListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{11}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{14}
 }
 
 // SchemaInfo describes a registered schema.
@@ -778,7 +945,7 @@ type SchemaInfo struct {
 
 func (x *SchemaInfo) Reset() {
 	*x = SchemaInfo{}
-	mi := &file_proto_qwerq_proto_msgTypes[12]
+	mi := &file_proto_qwerq_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +957,7 @@ func (x *SchemaInfo) String() string {
 func (*SchemaInfo) ProtoMessage() {}
 
 func (x *SchemaInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[12]
+	mi := &file_proto_qwerq_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +970,7 @@ func (x *SchemaInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaInfo.ProtoReflect.Descriptor instead.
 func (*SchemaInfo) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{12}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SchemaInfo) GetQueue() string {
@@ -837,7 +1004,7 @@ type SchemaListResponse struct {
 
 func (x *SchemaListResponse) Reset() {
 	*x = SchemaListResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[13]
+	mi := &file_proto_qwerq_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -849,7 +1016,7 @@ func (x *SchemaListResponse) String() string {
 func (*SchemaListResponse) ProtoMessage() {}
 
 func (x *SchemaListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[13]
+	mi := &file_proto_qwerq_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -862,7 +1029,7 @@ func (x *SchemaListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaListResponse.ProtoReflect.Descriptor instead.
 func (*SchemaListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{13}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SchemaListResponse) GetSchemas() []*SchemaInfo {
@@ -881,7 +1048,7 @@ type QueueListRequest struct {
 
 func (x *QueueListRequest) Reset() {
 	*x = QueueListRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[14]
+	mi := &file_proto_qwerq_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -893,7 +1060,7 @@ func (x *QueueListRequest) String() string {
 func (*QueueListRequest) ProtoMessage() {}
 
 func (x *QueueListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[14]
+	mi := &file_proto_qwerq_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -906,7 +1073,7 @@ func (x *QueueListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueListRequest.ProtoReflect.Descriptor instead.
 func (*QueueListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{14}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{17}
 }
 
 // QueueInfo describes a queue.
@@ -921,7 +1088,7 @@ type QueueInfo struct {
 
 func (x *QueueInfo) Reset() {
 	*x = QueueInfo{}
-	mi := &file_proto_qwerq_proto_msgTypes[15]
+	mi := &file_proto_qwerq_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -933,7 +1100,7 @@ func (x *QueueInfo) String() string {
 func (*QueueInfo) ProtoMessage() {}
 
 func (x *QueueInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[15]
+	mi := &file_proto_qwerq_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -946,7 +1113,7 @@ func (x *QueueInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueInfo.ProtoReflect.Descriptor instead.
 func (*QueueInfo) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{15}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *QueueInfo) GetName() string {
@@ -980,7 +1147,7 @@ type QueueListResponse struct {
 
 func (x *QueueListResponse) Reset() {
 	*x = QueueListResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[16]
+	mi := &file_proto_qwerq_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -992,7 +1159,7 @@ func (x *QueueListResponse) String() string {
 func (*QueueListResponse) ProtoMessage() {}
 
 func (x *QueueListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[16]
+	mi := &file_proto_qwerq_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1005,7 +1172,7 @@ func (x *QueueListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueListResponse.ProtoReflect.Descriptor instead.
 func (*QueueListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{16}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *QueueListResponse) GetQueues() []*QueueInfo {
@@ -1026,7 +1193,7 @@ type ExtendVisibilityRequest struct {
 
 func (x *ExtendVisibilityRequest) Reset() {
 	*x = ExtendVisibilityRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[17]
+	mi := &file_proto_qwerq_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1038,7 +1205,7 @@ func (x *ExtendVisibilityRequest) String() string {
 func (*ExtendVisibilityRequest) ProtoMessage() {}
 
 func (x *ExtendVisibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[17]
+	mi := &file_proto_qwerq_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1051,7 +1218,7 @@ func (x *ExtendVisibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExtendVisibilityRequest.ProtoReflect.Descriptor instead.
 func (*ExtendVisibilityRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{17}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ExtendVisibilityRequest) GetMessageId() string {
@@ -1078,7 +1245,7 @@ type ExtendVisibilityResponse struct {
 
 func (x *ExtendVisibilityResponse) Reset() {
 	*x = ExtendVisibilityResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[18]
+	mi := &file_proto_qwerq_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1090,7 +1257,7 @@ func (x *ExtendVisibilityResponse) String() string {
 func (*ExtendVisibilityResponse) ProtoMessage() {}
 
 func (x *ExtendVisibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[18]
+	mi := &file_proto_qwerq_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1103,7 +1270,7 @@ func (x *ExtendVisibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExtendVisibilityResponse.ProtoReflect.Descriptor instead.
 func (*ExtendVisibilityResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{18}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ExtendVisibilityResponse) GetNewVisibleAt() int64 {
@@ -1111,6 +1278,104 @@ func (x *ExtendVisibilityResponse) GetNewVisibleAt() int64 {
 		return x.NewVisibleAt
 	}
 	return 0
+}
+
+// AuthRequest is sent by client to authenticate.
+type AuthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthRequest) Reset() {
+	*x = AuthRequest{}
+	mi := &file_proto_qwerq_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthRequest) ProtoMessage() {}
+
+func (x *AuthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthRequest.ProtoReflect.Descriptor instead.
+func (*AuthRequest) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AuthRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+// AuthResponse confirms or rejects authentication.
+type AuthResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthResponse) Reset() {
+	*x = AuthResponse{}
+	mi := &file_proto_qwerq_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthResponse) ProtoMessage() {}
+
+func (x *AuthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthResponse.ProtoReflect.Descriptor instead.
+func (*AuthResponse) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AuthResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *AuthResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
 }
 
 // SeekRequest positions a stream consumer at a specific offset.
@@ -1127,7 +1392,7 @@ type SeekRequest struct {
 
 func (x *SeekRequest) Reset() {
 	*x = SeekRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[19]
+	mi := &file_proto_qwerq_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1139,7 +1404,7 @@ func (x *SeekRequest) String() string {
 func (*SeekRequest) ProtoMessage() {}
 
 func (x *SeekRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[19]
+	mi := &file_proto_qwerq_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1152,7 +1417,7 @@ func (x *SeekRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SeekRequest.ProtoReflect.Descriptor instead.
 func (*SeekRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{19}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SeekRequest) GetQueue() string {
@@ -1200,7 +1465,7 @@ type SeekResponse struct {
 
 func (x *SeekResponse) Reset() {
 	*x = SeekResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[20]
+	mi := &file_proto_qwerq_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1212,7 +1477,7 @@ func (x *SeekResponse) String() string {
 func (*SeekResponse) ProtoMessage() {}
 
 func (x *SeekResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[20]
+	mi := &file_proto_qwerq_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1225,7 +1490,7 @@ func (x *SeekResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SeekResponse.ProtoReflect.Descriptor instead.
 func (*SeekResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{20}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SeekResponse) GetOffset() uint64 {
@@ -1247,7 +1512,7 @@ type CommitOffsetRequest struct {
 
 func (x *CommitOffsetRequest) Reset() {
 	*x = CommitOffsetRequest{}
-	mi := &file_proto_qwerq_proto_msgTypes[21]
+	mi := &file_proto_qwerq_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1259,7 +1524,7 @@ func (x *CommitOffsetRequest) String() string {
 func (*CommitOffsetRequest) ProtoMessage() {}
 
 func (x *CommitOffsetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[21]
+	mi := &file_proto_qwerq_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1272,7 +1537,7 @@ func (x *CommitOffsetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitOffsetRequest.ProtoReflect.Descriptor instead.
 func (*CommitOffsetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{21}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CommitOffsetRequest) GetQueue() string {
@@ -1306,7 +1571,7 @@ type CommitOffsetResponse struct {
 
 func (x *CommitOffsetResponse) Reset() {
 	*x = CommitOffsetResponse{}
-	mi := &file_proto_qwerq_proto_msgTypes[22]
+	mi := &file_proto_qwerq_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1318,7 +1583,7 @@ func (x *CommitOffsetResponse) String() string {
 func (*CommitOffsetResponse) ProtoMessage() {}
 
 func (x *CommitOffsetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[22]
+	mi := &file_proto_qwerq_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1331,7 +1596,7 @@ func (x *CommitOffsetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitOffsetResponse.ProtoReflect.Descriptor instead.
 func (*CommitOffsetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{22}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CommitOffsetResponse) GetOffset() uint64 {
@@ -1356,7 +1621,7 @@ type StreamMessage struct {
 
 func (x *StreamMessage) Reset() {
 	*x = StreamMessage{}
-	mi := &file_proto_qwerq_proto_msgTypes[23]
+	mi := &file_proto_qwerq_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1368,7 +1633,7 @@ func (x *StreamMessage) String() string {
 func (*StreamMessage) ProtoMessage() {}
 
 func (x *StreamMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_qwerq_proto_msgTypes[23]
+	mi := &file_proto_qwerq_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1381,7 +1646,7 @@ func (x *StreamMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamMessage.ProtoReflect.Descriptor instead.
 func (*StreamMessage) Descriptor() ([]byte, []int) {
-	return file_proto_qwerq_proto_rawDescGZIP(), []int{23}
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StreamMessage) GetMessageId() string {
@@ -1430,14 +1695,15 @@ var File_proto_qwerq_proto protoreflect.FileDescriptor
 
 const file_proto_qwerq_proto_rawDesc = "" +
 	"\n" +
-	"\x11proto/qwerq.proto\x12\x05qwerq\"\xaf\x02\n" +
+	"\x11proto/qwerq.proto\x12\x05qwerq\"\xd2\x02\n" +
 	"\x0ePublishRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12<\n" +
 	"\aheaders\x18\x03 \x03(\v2\".qwerq.PublishRequest.HeadersEntryR\aheaders\x12\"\n" +
 	"\n" +
 	"message_id\x18\x04 \x01(\tH\x00R\tmessageId\x88\x01\x01\x12,\n" +
-	"\x0fidempotency_key\x18\x05 \x01(\tH\x01R\x0eidempotencyKey\x88\x01\x01\x1a:\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tH\x01R\x0eidempotencyKey\x88\x01\x01\x12!\n" +
+	"\fordering_key\x18\x06 \x01(\tR\vorderingKey\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
@@ -1445,11 +1711,21 @@ const file_proto_qwerq_proto_rawDesc = "" +
 	"\x10_idempotency_key\"0\n" +
 	"\x0fPublishResponse\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\tR\tmessageId\"q\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\"\x96\x01\n" +
 	"\x0eConsumeRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1a\n" +
 	"\bprefetch\x18\x02 \x01(\rR\bprefetch\x12-\n" +
-	"\x12visibility_timeout\x18\x03 \x01(\rR\x11visibilityTimeout\"\x88\x02\n" +
+	"\x12visibility_timeout\x18\x03 \x01(\rR\x11visibilityTimeout\x12\x19\n" +
+	"\x05group\x18\x04 \x01(\tH\x00R\x05group\x88\x01\x01B\b\n" +
+	"\x06_group\">\n" +
+	"\x10HeartbeatRequest\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12\x14\n" +
+	"\x05queue\x18\x02 \x01(\tR\x05queue\"\x13\n" +
+	"\x11HeartbeatResponse\"O\n" +
+	"\x12UnsubscribeRequest\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x19\n" +
+	"\x05group\x18\x02 \x01(\tH\x00R\x05group\x88\x01\x01B\b\n" +
+	"\x06_group\"\xab\x02\n" +
 	"\aMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12\x14\n" +
@@ -1457,7 +1733,8 @@ const file_proto_qwerq_proto_rawDesc = "" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x125\n" +
 	"\aheaders\x18\x04 \x03(\v2\x1b.qwerq.Message.HeadersEntryR\aheaders\x12\x18\n" +
 	"\aattempt\x18\x05 \x01(\rR\aattempt\x12!\n" +
-	"\fpublished_at\x18\x06 \x01(\x03R\vpublishedAt\x1a:\n" +
+	"\fpublished_at\x18\x06 \x01(\x03R\vpublishedAt\x12!\n" +
+	"\fordering_key\x18\a \x01(\tR\vorderingKey\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"+\n" +
@@ -1516,7 +1793,12 @@ const file_proto_qwerq_proto_rawDesc = "" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12+\n" +
 	"\x11extension_seconds\x18\x02 \x01(\rR\x10extensionSeconds\"@\n" +
 	"\x18ExtendVisibilityResponse\x12$\n" +
-	"\x0enew_visible_at\x18\x01 \x01(\x03R\fnewVisibleAt\"\xb1\x01\n" +
+	"\x0enew_visible_at\x18\x01 \x01(\x03R\fnewVisibleAt\"#\n" +
+	"\vAuthRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"B\n" +
+	"\fAuthResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xb1\x01\n" +
 	"\vSeekRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12%\n" +
 	"\x0econsumer_group\x18\x02 \x01(\tR\rconsumerGroup\x12/\n" +
@@ -1561,48 +1843,53 @@ func file_proto_qwerq_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_qwerq_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_qwerq_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_proto_qwerq_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_proto_qwerq_proto_goTypes = []any{
 	(SeekPosition)(0),                // 0: qwerq.SeekPosition
 	(*PublishRequest)(nil),           // 1: qwerq.PublishRequest
 	(*PublishResponse)(nil),          // 2: qwerq.PublishResponse
 	(*ConsumeRequest)(nil),           // 3: qwerq.ConsumeRequest
-	(*Message)(nil),                  // 4: qwerq.Message
-	(*AckRequest)(nil),               // 5: qwerq.AckRequest
-	(*NackRequest)(nil),              // 6: qwerq.NackRequest
-	(*ErrorResponse)(nil),            // 7: qwerq.ErrorResponse
-	(*SchemaRegisterRequest)(nil),    // 8: qwerq.SchemaRegisterRequest
-	(*SchemaRegisterResponse)(nil),   // 9: qwerq.SchemaRegisterResponse
-	(*CallRequest)(nil),              // 10: qwerq.CallRequest
-	(*CallResponse)(nil),             // 11: qwerq.CallResponse
-	(*SchemaListRequest)(nil),        // 12: qwerq.SchemaListRequest
-	(*SchemaInfo)(nil),               // 13: qwerq.SchemaInfo
-	(*SchemaListResponse)(nil),       // 14: qwerq.SchemaListResponse
-	(*QueueListRequest)(nil),         // 15: qwerq.QueueListRequest
-	(*QueueInfo)(nil),                // 16: qwerq.QueueInfo
-	(*QueueListResponse)(nil),        // 17: qwerq.QueueListResponse
-	(*ExtendVisibilityRequest)(nil),  // 18: qwerq.ExtendVisibilityRequest
-	(*ExtendVisibilityResponse)(nil), // 19: qwerq.ExtendVisibilityResponse
-	(*SeekRequest)(nil),              // 20: qwerq.SeekRequest
-	(*SeekResponse)(nil),             // 21: qwerq.SeekResponse
-	(*CommitOffsetRequest)(nil),      // 22: qwerq.CommitOffsetRequest
-	(*CommitOffsetResponse)(nil),     // 23: qwerq.CommitOffsetResponse
-	(*StreamMessage)(nil),            // 24: qwerq.StreamMessage
-	nil,                              // 25: qwerq.PublishRequest.HeadersEntry
-	nil,                              // 26: qwerq.Message.HeadersEntry
-	nil,                              // 27: qwerq.CallRequest.HeadersEntry
-	nil,                              // 28: qwerq.CallResponse.HeadersEntry
-	nil,                              // 29: qwerq.StreamMessage.HeadersEntry
+	(*HeartbeatRequest)(nil),         // 4: qwerq.HeartbeatRequest
+	(*HeartbeatResponse)(nil),        // 5: qwerq.HeartbeatResponse
+	(*UnsubscribeRequest)(nil),       // 6: qwerq.UnsubscribeRequest
+	(*Message)(nil),                  // 7: qwerq.Message
+	(*AckRequest)(nil),               // 8: qwerq.AckRequest
+	(*NackRequest)(nil),              // 9: qwerq.NackRequest
+	(*ErrorResponse)(nil),            // 10: qwerq.ErrorResponse
+	(*SchemaRegisterRequest)(nil),    // 11: qwerq.SchemaRegisterRequest
+	(*SchemaRegisterResponse)(nil),   // 12: qwerq.SchemaRegisterResponse
+	(*CallRequest)(nil),              // 13: qwerq.CallRequest
+	(*CallResponse)(nil),             // 14: qwerq.CallResponse
+	(*SchemaListRequest)(nil),        // 15: qwerq.SchemaListRequest
+	(*SchemaInfo)(nil),               // 16: qwerq.SchemaInfo
+	(*SchemaListResponse)(nil),       // 17: qwerq.SchemaListResponse
+	(*QueueListRequest)(nil),         // 18: qwerq.QueueListRequest
+	(*QueueInfo)(nil),                // 19: qwerq.QueueInfo
+	(*QueueListResponse)(nil),        // 20: qwerq.QueueListResponse
+	(*ExtendVisibilityRequest)(nil),  // 21: qwerq.ExtendVisibilityRequest
+	(*ExtendVisibilityResponse)(nil), // 22: qwerq.ExtendVisibilityResponse
+	(*AuthRequest)(nil),              // 23: qwerq.AuthRequest
+	(*AuthResponse)(nil),             // 24: qwerq.AuthResponse
+	(*SeekRequest)(nil),              // 25: qwerq.SeekRequest
+	(*SeekResponse)(nil),             // 26: qwerq.SeekResponse
+	(*CommitOffsetRequest)(nil),      // 27: qwerq.CommitOffsetRequest
+	(*CommitOffsetResponse)(nil),     // 28: qwerq.CommitOffsetResponse
+	(*StreamMessage)(nil),            // 29: qwerq.StreamMessage
+	nil,                              // 30: qwerq.PublishRequest.HeadersEntry
+	nil,                              // 31: qwerq.Message.HeadersEntry
+	nil,                              // 32: qwerq.CallRequest.HeadersEntry
+	nil,                              // 33: qwerq.CallResponse.HeadersEntry
+	nil,                              // 34: qwerq.StreamMessage.HeadersEntry
 }
 var file_proto_qwerq_proto_depIdxs = []int32{
-	25, // 0: qwerq.PublishRequest.headers:type_name -> qwerq.PublishRequest.HeadersEntry
-	26, // 1: qwerq.Message.headers:type_name -> qwerq.Message.HeadersEntry
-	27, // 2: qwerq.CallRequest.headers:type_name -> qwerq.CallRequest.HeadersEntry
-	28, // 3: qwerq.CallResponse.headers:type_name -> qwerq.CallResponse.HeadersEntry
-	13, // 4: qwerq.SchemaListResponse.schemas:type_name -> qwerq.SchemaInfo
-	16, // 5: qwerq.QueueListResponse.queues:type_name -> qwerq.QueueInfo
+	30, // 0: qwerq.PublishRequest.headers:type_name -> qwerq.PublishRequest.HeadersEntry
+	31, // 1: qwerq.Message.headers:type_name -> qwerq.Message.HeadersEntry
+	32, // 2: qwerq.CallRequest.headers:type_name -> qwerq.CallRequest.HeadersEntry
+	33, // 3: qwerq.CallResponse.headers:type_name -> qwerq.CallResponse.HeadersEntry
+	16, // 4: qwerq.SchemaListResponse.schemas:type_name -> qwerq.SchemaInfo
+	19, // 5: qwerq.QueueListResponse.queues:type_name -> qwerq.QueueInfo
 	0,  // 6: qwerq.SeekRequest.position:type_name -> qwerq.SeekPosition
-	29, // 7: qwerq.StreamMessage.headers:type_name -> qwerq.StreamMessage.HeadersEntry
+	34, // 7: qwerq.StreamMessage.headers:type_name -> qwerq.StreamMessage.HeadersEntry
 	8,  // [8:8] is the sub-list for method output_type
 	8,  // [8:8] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
@@ -1616,13 +1903,15 @@ func file_proto_qwerq_proto_init() {
 		return
 	}
 	file_proto_qwerq_proto_msgTypes[0].OneofWrappers = []any{}
+	file_proto_qwerq_proto_msgTypes[2].OneofWrappers = []any{}
+	file_proto_qwerq_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_qwerq_proto_rawDesc), len(file_proto_qwerq_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   29,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

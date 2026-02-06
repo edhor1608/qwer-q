@@ -21,14 +21,15 @@ const DefaultMemoryLimit = 400 * 1024 * 1024
 
 // Broker manages queues and message routing.
 type Broker struct {
-	mu            sync.RWMutex
-	queues        map[string]*Queue
-	streamQueues  map[string]*StreamQueue
-	done          chan struct{}
-	storage       storage.Storage
-	dedup         *IdempotencyTracker
-	memoryLimit   uint64        // Maximum memory in bytes (0 = unlimited)
-	cachedAlloc   atomic.Uint64 // Cached memory allocation (updated by background goroutine)
+	mu           sync.RWMutex
+	queues       map[string]*Queue
+	streamQueues map[string]*StreamQueue
+	done         chan struct{}
+	storage      storage.Storage
+	dedup        *IdempotencyTracker
+	memoryLimit  uint64        // Maximum memory in bytes (0 = unlimited)
+	cachedAlloc  atomic.Uint64 // Cached memory allocation (updated by background goroutine)
+	startedAt    time.Time
 }
 
 // BrokerOption configures a Broker.
@@ -54,6 +55,7 @@ func NewBroker(opts ...BrokerOption) *Broker {
 		done:         make(chan struct{}),
 		dedup:        NewIdempotencyTracker(DefaultIdempotencyTTL),
 		memoryLimit:  DefaultMemoryLimit,
+		startedAt:    time.Now(),
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -111,7 +113,7 @@ func (b *Broker) memoryMonitor() {
 	}
 }
 
-// reaper periodically checks for expired in-flight messages.
+// reaper periodically checks for expired in-flight messages and dead group members.
 func (b *Broker) reaper() {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -121,6 +123,13 @@ func (b *Broker) reaper() {
 			b.mu.RLock()
 			for _, q := range b.queues {
 				q.RequeueExpired()
+				dead := q.ReapDeadGroupMembers()
+				for _, memberID := range dead {
+					logger.Info("group member timed out",
+						"queue", q.Name(),
+						"member", memberID,
+					)
+				}
 			}
 			b.mu.RUnlock()
 		case <-b.done:
@@ -199,6 +208,7 @@ func (b *Broker) LoadFromStorage() error {
 				Attempt:     sm.Attempt,
 				PublishedAt: sm.PublishedAt,
 				VisibleAt:   sm.VisibleAt,
+				OrderingKey: sm.OrderingKey,
 			}
 			q.EnqueueDirect(msg)
 		}
@@ -285,6 +295,21 @@ func (b *Broker) GetQueue(name string) *Queue {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.queues[name]
+}
+
+// StartedAt returns when the broker was created.
+func (b *Broker) StartedAt() time.Time {
+	return b.startedAt
+}
+
+// MemoryAlloc returns the cached memory allocation in bytes.
+func (b *Broker) MemoryAlloc() uint64 {
+	return b.cachedAlloc.Load()
+}
+
+// MemoryLimit returns the configured memory limit in bytes.
+func (b *Broker) MemoryLimit() uint64 {
+	return b.memoryLimit
 }
 
 // ListQueues returns all queue names sorted alphabetically (includes stream queues).

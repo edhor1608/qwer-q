@@ -154,11 +154,11 @@ func TestBrokerDLQIntegration(t *testing.T) {
 	<-ch
 
 	// First nack - requeue
-	b.HandleNack(&protocol.NackRequest{MessageId: msgID, Requeue: true}, "test-queue")
+	b.HandleNack(&protocol.NackRequest{MessageId: msgID, Requeue: true}, "test-queue", "")
 	<-ch
 
 	// Second nack - should go to DLQ
-	b.HandleNack(&protocol.NackRequest{MessageId: msgID, Requeue: true}, "test-queue")
+	b.HandleNack(&protocol.NackRequest{MessageId: msgID, Requeue: true}, "test-queue", "")
 
 	// Verify DLQ exists and has the message
 	dlq := b.GetQueue("test-queue.dlq")
@@ -193,7 +193,7 @@ func TestNackWithoutRequeue(t *testing.T) {
 	<-ch
 
 	// Nack without requeue - should go directly to DLQ
-	b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: false}, "test-queue")
+	b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: false}, "test-queue", "")
 
 	dlq := b.GetQueue("test-queue.dlq")
 	if dlq == nil || dlq.Len() != 1 {

@@ -13,6 +13,8 @@ const (
 	OpAck              OpCode = 0x05
 	OpNack             OpCode = 0x06
 	OpExtendVisibility OpCode = 0x08
+	OpHeartbeat        OpCode = 0x0A
+	OpUnsubscribe      OpCode = 0x0B
 	OpSchemaRegister   OpCode = 0x10
 	OpSchemaGet        OpCode = 0x11
 	OpCall             OpCode = 0x20
@@ -24,21 +26,22 @@ const (
 	OpMessage             OpCode = 0x04
 	OpError               OpCode = 0x07
 	OpExtendVisibilityAck OpCode = 0x09
+	OpHeartbeatAck        OpCode = 0x0C
 	OpSchemaResponse      OpCode = 0x12
 	OpCallResponse        OpCode = 0x21
 )
 
 // Stream operations (client -> server)
 const (
-	OpSeek         OpCode = 0x0A
-	OpCommitOffset OpCode = 0x0B
+	OpSeek         OpCode = 0x50
+	OpCommitOffset OpCode = 0x51
 )
 
 // Stream operations (server -> client)
 const (
-	OpSeekAck         OpCode = 0x0C
-	OpCommitOffsetAck OpCode = 0x0D
-	OpStreamMessage   OpCode = 0x0E
+	OpSeekAck         OpCode = 0x52
+	OpCommitOffsetAck OpCode = 0x53
+	OpStreamMessage   OpCode = 0x54
 )
 
 // Admin operations
@@ -47,6 +50,12 @@ const (
 	OpSchemaListResp OpCode = 0x31
 	OpQueueList      OpCode = 0x32
 	OpQueueListResp  OpCode = 0x33
+)
+
+// Auth operations
+const (
+	OpAuth         OpCode = 0x40
+	OpAuthResponse OpCode = 0x41
 )
 
 var opCodeNames = map[OpCode]string{
@@ -59,6 +68,9 @@ var opCodeNames = map[OpCode]string{
 	OpError:               "ERROR",
 	OpExtendVisibility:    "EXTEND_VISIBILITY",
 	OpExtendVisibilityAck: "EXTEND_VISIBILITY_ACK",
+	OpHeartbeat:           "HEARTBEAT",
+	OpUnsubscribe:         "UNSUBSCRIBE",
+	OpHeartbeatAck:        "HEARTBEAT_ACK",
 	OpSeek:                "SEEK",
 	OpCommitOffset:        "COMMIT_OFFSET",
 	OpSeekAck:             "SEEK_ACK",
@@ -73,6 +85,8 @@ var opCodeNames = map[OpCode]string{
 	OpSchemaListResp:      "SCHEMA_LIST_RESP",
 	OpQueueList:           "QUEUE_LIST",
 	OpQueueListResp:       "QUEUE_LIST_RESP",
+	OpAuth:                "AUTH",
+	OpAuthResponse:        "AUTH_RESPONSE",
 }
 
 func (op OpCode) String() string {
