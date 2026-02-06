@@ -25,6 +25,7 @@ func init() {
 	serveCmd.Flags().Int("metrics-port", 9877, "metrics server port")
 	serveCmd.Flags().String("data-dir", "/data", "data directory for message persistence")
 	serveCmd.Flags().String("max-message-size", "1MB", "maximum message payload size (e.g., 1MB, 512KB)")
+	serveCmd.Flags().Duration("batch-interval", 0, "write batch flush interval (e.g., 5ms). 0 = no batching")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -33,6 +34,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	metricsPort, _ := cmd.Flags().GetInt("metrics-port")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	maxMsgSize, _ := cmd.Flags().GetString("max-message-size")
+	batchInterval, _ := cmd.Flags().GetDuration("batch-interval")
 	addr := fmt.Sprintf(":%d", port)
 	metricsAddr := fmt.Sprintf(":%d", metricsPort)
 
@@ -47,7 +49,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// Initialize persistent storage if data directory is specified
 	if dataDir != "" {
-		store, err := storage.NewBadgerStorage(dataDir)
+		var storageOpts []storage.StorageOption
+		if batchInterval > 0 {
+			storageOpts = append(storageOpts, storage.WithBatchInterval(batchInterval))
+		}
+		store, err := storage.NewBadgerStorage(dataDir, storageOpts...)
 		if err != nil {
 			return fmt.Errorf("failed to open storage: %w", err)
 		}
