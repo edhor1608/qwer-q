@@ -1,0 +1,63 @@
+---
+title: QWER-Q
+description: A typed, docker-first message queue built in Go.
+template: splash
+hero:
+  tagline: The message queue that runs with a single Docker command. Typed, durable, lightweight.
+  actions:
+    - text: Get Started in 5 Minutes
+      link: /getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/jonas/qwer-q
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why QWER-Q?
+
+<CardGrid>
+	<Card title="Docker-First" icon="rocket">
+		`docker run -p 9876:9876 qwer-q` — that's it. No config files, no external dependencies, no ops burden.
+	</Card>
+	<Card title="Typed by Default" icon="approve-check">
+		Built-in schema registry with Protobuf validation. Producers can only publish valid messages.
+	</Card>
+	<Card title="Durable" icon="document">
+		BadgerDB persistence survives broker restarts. Configurable sync interval for your durability/throughput tradeoff.
+	</Card>
+	<Card title="Lightweight" icon="star">
+		Single Go binary. Runs in a 512MB container. ~5K msgs/sec with persistence enabled.
+	</Card>
+</CardGrid>
+
+## The Gap It Fills
+
+| | Kafka | NATS | QWER-Q |
+|---|---|---|---|
+| **Deployment** | Multi-component cluster | Single binary | Single binary |
+| **Persistence** | Built-in (complex) | Optional add-on | Built-in (simple) |
+| **Schema validation** | Separate registry | None | Built-in |
+| **Ops complexity** | High | Low | Minimal |
+| **Target** | Event streaming at scale | Lightweight messaging | Typed task queues |
+
+## Quick Taste
+
+```bash
+# Start the broker
+docker run -d -p 9876:9876 -p 9877:9877 qwer-q
+
+# Register a schema
+qwer-q schema register -q orders -p order.proto -m "myapp.Order"
+
+# Publish a message (from your Go code)
+client.Publish("orders", orderBytes)
+
+# Consume messages
+client.Consume("orders", 1, func(msg *Message) error {
+    // Process order...
+    return client.Ack(msg.MessageId)
+})
+```

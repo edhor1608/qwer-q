@@ -1,0 +1,170 @@
+---
+title: Getting Started
+description: Go from zero to publishing your first message in under 5 minutes.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+This guide gets you from zero to a running broker with your first message published and consumed. Total time: under 5 minutes.
+
+## Prerequisites
+
+- Docker installed and running
+- The `qwer-q` CLI binary ([download from releases](https://github.com/jonas/qwer-q/releases) or build from source)
+
+## Quick Start
+
+<Steps>
+
+1. **Start the broker**
+
+   ```bash
+   docker run -d --name qwer-q \
+     -p 9876:9876 \
+     -p 9877:9877 \
+     -v qwer-q-data:/data \
+     qwer-q
+   ```
+
+   Port 9876 is the broker protocol port. Port 9877 serves Prometheus metrics and the health endpoint.
+
+2. **Verify it's running**
+
+   ```bash
+   curl http://localhost:9877/health
+   ```
+
+   You should see:
+   ```json
+   {"status":"ok","time":"2026-02-06T12:00:00Z"}
+   ```
+
+3. **Define your message schema**
+
+   Create a file called `task.proto`:
+
+   ```protobuf
+   syntax = "proto3";
+   package myapp;
+
+   message Task {
+     string id = 1;
+     string description = 2;
+     int32 priority = 3;
+   }
+   ```
+
+4. **Register the schema**
+
+   ```bash
+   qwer-q schema register -q tasks -p task.proto -m "myapp.Task"
+   ```
+
+   Output:
+   ```
+   Schema registered for queue "tasks" (version 1)
+   ```
+
+   <Aside>
+   Schemas are required before publishing. This ensures every message on a queue is valid according to the registered Protobuf definition.
+   </Aside>
+
+5. **Publish a message**
+
+   Using the Go client library:
+
+   ```go
+   package main
+
+   import (
+       "log"
+       "github.com/jonas/qwer-q/pkg/client"
+       "google.golang.org/protobuf/proto"
+       pb "myapp/gen/myapp" // your generated proto
+   )
+
+   func main() {
+       c, err := client.Dial("localhost:9876")
+       if err != nil {
+           log.Fatal(err)
+       }
+       defer c.Close()
+
+       task := &pb.Task{
+           Id:          "task-001",
+           Description: "Process order #1234",
+           Priority:    1,
+       }
+       payload, _ := proto.Marshal(task)
+
+       resp, err := c.Publish("tasks", payload)
+       if err != nil {
+           log.Fatal(err)
+       }
+       log.Printf("Published: %s", resp.MessageId)
+   }
+   ```
+
+6. **Consume messages**
+
+   ```go
+   package main
+
+   import (
+       "log"
+       "github.com/jonas/qwer-q/pkg/client"
+       "github.com/jonas/qwer-q/internal/protocol"
+       "google.golang.org/protobuf/proto"
+       pb "myapp/gen/myapp"
+   )
+
+   func main() {
+       c, err := client.Dial("localhost:9876")
+       if err != nil {
+           log.Fatal(err)
+       }
+       defer c.Close()
+
+       err = c.Consume("tasks", 1, func(msg *protocol.Message) error {
+           var task pb.Task
+           proto.Unmarshal(msg.Payload, &task)
+           log.Printf("Received task: %s — %s (priority %d)",
+               task.Id, task.Description, task.Priority)
+
+           // Acknowledge the message
+           return c.Ack(msg.MessageId)
+       })
+       if err != nil {
+           log.Fatal(err)
+       }
+   }
+   ```
+
+7. **Check queue status**
+
+   ```bash
+   qwer-q queue list
+   ```
+
+   Output:
+   ```
+   NAME    MESSAGES  IN-FLIGHT
+   tasks   0         0
+   ```
+
+</Steps>
+
+## What Just Happened?
+
+1. The Docker container started a QWER-Q broker with BadgerDB persistence at `/data`
+2. You registered a Protobuf schema that defines what messages look like on the `tasks` queue
+3. The broker validated your published message against the schema before accepting it
+4. The consumer received the message, and after your `Ack()`, the broker permanently deleted it
+5. Data persists across container restarts thanks to the Docker volume
+
+## Next Steps
+
+- Read about [Concepts](/concepts/) to understand queues, visibility timeouts, and DLQs
+- See the [CLI Reference](/reference/cli/) for all available commands
+- Check the [Deployment Guide](/deployment/) for production configuration
+- Review [Configuration](/reference/configuration/) for all flags and defaults
