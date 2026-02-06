@@ -21,14 +21,15 @@ const DefaultMemoryLimit = 400 * 1024 * 1024
 
 // Broker manages queues and message routing.
 type Broker struct {
-	mu          sync.RWMutex
-	queues      map[string]*Queue
-	done        chan struct{}
-	storage     storage.Storage
-	dedup       *IdempotencyTracker
-	memoryLimit uint64        // Maximum memory in bytes (0 = unlimited)
-	cachedAlloc atomic.Uint64 // Cached memory allocation (updated by background goroutine)
-	startedAt   time.Time
+	mu           sync.RWMutex
+	queues       map[string]*Queue
+	streamQueues map[string]*StreamQueue
+	done         chan struct{}
+	storage      storage.Storage
+	dedup        *IdempotencyTracker
+	memoryLimit  uint64        // Maximum memory in bytes (0 = unlimited)
+	cachedAlloc  atomic.Uint64 // Cached memory allocation (updated by background goroutine)
+	startedAt    time.Time
 }
 
 // BrokerOption configures a Broker.
@@ -49,16 +50,18 @@ func WithMemoryLimit(limit uint64) BrokerOption {
 // NewBroker creates a new broker.
 func NewBroker(opts ...BrokerOption) *Broker {
 	b := &Broker{
-		queues:      make(map[string]*Queue),
-		done:        make(chan struct{}),
-		dedup:       NewIdempotencyTracker(DefaultIdempotencyTTL),
-		memoryLimit: DefaultMemoryLimit,
-		startedAt:   time.Now(),
+		queues:       make(map[string]*Queue),
+		streamQueues: make(map[string]*StreamQueue),
+		done:         make(chan struct{}),
+		dedup:        NewIdempotencyTracker(DefaultIdempotencyTTL),
+		memoryLimit:  DefaultMemoryLimit,
+		startedAt:    time.Now(),
 	}
 	for _, opt := range opts {
 		opt(b)
 	}
 	go b.reaper()
+	go b.retentionLoop()
 	if b.memoryLimit != 0 {
 		go b.memoryMonitor()
 	}
@@ -135,6 +138,24 @@ func (b *Broker) reaper() {
 	}
 }
 
+// retentionLoop periodically runs retention cleanup on stream queues.
+func (b *Broker) retentionLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			b.mu.RLock()
+			for _, sq := range b.streamQueues {
+				sq.RunRetention()
+			}
+			b.mu.RUnlock()
+		case <-b.done:
+			return
+		}
+	}
+}
+
 // Close stops the broker.
 func (b *Broker) Close() {
 	close(b.done)
@@ -160,7 +181,19 @@ func (b *Broker) LoadFromStorage() error {
 	if err != nil {
 		return err
 	}
-	for name := range queues {
+	for name, cfg := range queues {
+		if cfg.Mode == storage.QueueModeStream {
+			// Stream queues restore their sequence from storage in NewStreamQueue
+			sq := b.GetOrCreateStreamQueue(name)
+			if cfg.RetentionMaxAge > 0 || cfg.RetentionMaxBytes > 0 {
+				sq.SetRetention(
+					time.Duration(cfg.RetentionMaxAge)*time.Second,
+					cfg.RetentionMaxBytes,
+				)
+			}
+			continue
+		}
+
 		storedMsgs, err := b.storage.LoadMessages(name)
 		if err != nil {
 			return err
@@ -209,6 +242,54 @@ func (b *Broker) GetOrCreateQueue(name string) *Queue {
 	return q
 }
 
+// GetOrCreateStreamQueue returns the stream queue with the given name, creating it if needed.
+func (b *Broker) GetOrCreateStreamQueue(name string) *StreamQueue {
+	b.mu.RLock()
+	sq, ok := b.streamQueues[name]
+	b.mu.RUnlock()
+	if ok {
+		return sq
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if sq, ok = b.streamQueues[name]; ok {
+		return sq
+	}
+
+	var streamStore storage.StreamStorage
+	if b.storage != nil {
+		if ss, ok := b.storage.(storage.StreamStorage); ok {
+			streamStore = ss
+		}
+	}
+
+	sq = NewStreamQueue(name, streamStore)
+	b.streamQueues[name] = sq
+
+	// Persist queue config
+	if b.storage != nil {
+		b.storage.SaveQueue(name, storage.QueueConfig{Mode: storage.QueueModeStream})
+	}
+
+	return sq
+}
+
+// GetStreamQueue returns the stream queue with the given name, or nil if not found.
+func (b *Broker) GetStreamQueue(name string) *StreamQueue {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.streamQueues[name]
+}
+
+// IsStreamQueue returns true if the named queue is in stream mode.
+func (b *Broker) IsStreamQueue(name string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	_, ok := b.streamQueues[name]
+	return ok
+}
+
 // GetQueue returns the queue with the given name, or nil if not found.
 func (b *Broker) GetQueue(name string) *Queue {
 	b.mu.RLock()
@@ -231,12 +312,15 @@ func (b *Broker) MemoryLimit() uint64 {
 	return b.memoryLimit
 }
 
-// ListQueues returns all queue names sorted alphabetically.
+// ListQueues returns all queue names sorted alphabetically (includes stream queues).
 func (b *Broker) ListQueues() []string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	names := make([]string, 0, len(b.queues))
+	names := make([]string, 0, len(b.queues)+len(b.streamQueues))
 	for name := range b.queues {
+		names = append(names, name)
+	}
+	for name := range b.streamQueues {
 		names = append(names, name)
 	}
 	sort.Strings(names)

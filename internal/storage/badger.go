@@ -48,8 +48,10 @@ func WithBatchMaxSize(n int) StorageOption {
 const DefaultBatchMaxSize = 100
 
 const (
-	msgPrefix   = "msg:"
-	queuePrefix = "queue:"
+	msgPrefix      = "msg:"
+	queuePrefix    = "queue:"
+	streamPrefix   = "stream:"  // stream:{queue}:{sequence} → StreamMessage
+	offsetPrefix   = "offset:"  // offset:{queue}:{group} → uint64
 )
 
 // BadgerStorage implements Storage using BadgerDB.
@@ -269,4 +271,254 @@ func (s *BadgerStorage) Close() error {
 		closeErr = s.db.Close()
 	})
 	return closeErr
+}
+
+// --- Stream storage methods ---
+
+// streamKey returns the storage key for a stream message.
+// Format: stream:{queue}:{sequence_padded_to_20_digits}
+func streamKey(queue string, seq uint64) []byte {
+	return []byte(fmt.Sprintf("%s%s:%020d", streamPrefix, queue, seq))
+}
+
+// offsetKey returns the storage key for a consumer group offset.
+func offsetKey(queue, group string) []byte {
+	return []byte(offsetPrefix + queue + ":" + group)
+}
+
+// SaveStreamMessage stores a message with its sequence number.
+func (s *BadgerStorage) SaveStreamMessage(queue string, seq uint64, msg *StreamMessage) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(streamKey(queue, seq), data)
+	})
+}
+
+// LoadStreamMessages loads messages starting at fromSeq, up to limit.
+func (s *BadgerStorage) LoadStreamMessages(queue string, fromSeq uint64, limit int) ([]*StreamMessage, error) {
+	var messages []*StreamMessage
+
+	prefix := []byte(streamPrefix + queue + ":")
+	startKey := streamKey(queue, fromSeq)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		count := 0
+		for it.Seek(startKey); it.ValidForPrefix(prefix) && count < limit; it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				var msg StreamMessage
+				if err := json.Unmarshal(val, &msg); err != nil {
+					return err
+				}
+				messages = append(messages, &msg)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			count++
+		}
+		return nil
+	})
+
+	return messages, err
+}
+
+// SaveConsumerOffset persists a consumer group's committed offset.
+func (s *BadgerStorage) SaveConsumerOffset(queue, group string, offset uint64) error {
+	data := []byte(fmt.Sprintf("%d", offset))
+	return s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(offsetKey(queue, group), data)
+	})
+}
+
+// LoadConsumerOffset loads a consumer group's last committed offset.
+func (s *BadgerStorage) LoadConsumerOffset(queue, group string) (uint64, error) {
+	var offset uint64
+	err := s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(offsetKey(queue, group))
+		if err == badger.ErrKeyNotFound {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			_, err := fmt.Sscanf(string(val), "%d", &offset)
+			return err
+		})
+	})
+	return offset, err
+}
+
+// LoadAllConsumerOffsets loads all consumer group offsets for a queue.
+func (s *BadgerStorage) LoadAllConsumerOffsets(queue string) (map[string]uint64, error) {
+	offsets := make(map[string]uint64)
+	prefix := []byte(offsetPrefix + queue + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			key := string(item.Key())
+			// Key format: offset:{queue}:{group}
+			group := key[len(offsetPrefix)+len(queue)+1:]
+
+			err := item.Value(func(val []byte) error {
+				var offset uint64
+				_, err := fmt.Sscanf(string(val), "%d", &offset)
+				if err != nil {
+					return err
+				}
+				offsets[group] = offset
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return offsets, err
+}
+
+// GetStreamSequence returns the highest sequence number for a queue.
+func (s *BadgerStorage) GetStreamSequence(queue string) (uint64, error) {
+	var seq uint64
+	prefix := []byte(streamPrefix + queue + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Reverse = true
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Seek to the end of the prefix range
+		// For reverse iteration, seek to prefix + max possible suffix
+		seekKey := []byte(streamPrefix + queue + ":\xff")
+		it.Seek(seekKey)
+
+		if it.ValidForPrefix(prefix) {
+			key := string(it.Item().Key())
+			// Key format: stream:{queue}:{sequence_padded_20}
+			seqStr := key[len(streamPrefix)+len(queue)+1:]
+			_, err := fmt.Sscanf(seqStr, "%d", &seq)
+			return err
+		}
+		return nil
+	})
+
+	return seq, err
+}
+
+// DeleteStreamMessagesBefore deletes all stream messages with sequence < seq.
+func (s *BadgerStorage) DeleteStreamMessagesBefore(queue string, seq uint64) error {
+	prefix := []byte(streamPrefix + queue + ":")
+	endKey := streamKey(queue, seq)
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		var toDelete [][]byte
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().KeyCopy(nil)
+			if string(key) >= string(endKey) {
+				break
+			}
+			toDelete = append(toDelete, key)
+		}
+		it.Close()
+
+		for _, key := range toDelete {
+			if err := txn.Delete(key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// GetStreamMessageByTimestamp finds the first message at or after the given timestamp.
+func (s *BadgerStorage) GetStreamMessageByTimestamp(queue string, timestampMs int64) (uint64, error) {
+	var foundSeq uint64
+	prefix := []byte(streamPrefix + queue + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				var msg StreamMessage
+				if err := json.Unmarshal(val, &msg); err != nil {
+					return err
+				}
+				if msg.PublishedAt.UnixMilli() >= timestampMs {
+					foundSeq = msg.Sequence
+					return errFound // sentinel to break iteration
+				}
+				return nil
+			})
+			if err == errFound {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return foundSeq, err
+}
+
+// sentinel error to break iteration
+var errFound = fmt.Errorf("found")
+
+// GetStreamStats returns the oldest and newest sequence numbers for a queue.
+func (s *BadgerStorage) GetStreamStats(queue string) (oldest, newest uint64, err error) {
+	prefix := []byte(streamPrefix + queue + ":")
+
+	err = s.db.View(func(txn *badger.Txn) error {
+		// Get oldest (forward iteration)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		it.Seek(prefix)
+		if it.ValidForPrefix(prefix) {
+			key := string(it.Item().Key())
+			seqStr := key[len(streamPrefix)+len(queue)+1:]
+			_, err := fmt.Sscanf(seqStr, "%d", &oldest)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return
+	}
+
+	// Get newest
+	newest, err = s.GetStreamSequence(queue)
+	return
 }

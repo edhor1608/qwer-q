@@ -21,6 +21,59 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SeekPosition defines where to start consuming in a stream.
+type SeekPosition int32
+
+const (
+	SeekPosition_SEEK_BEGINNING SeekPosition = 0
+	SeekPosition_SEEK_END       SeekPosition = 1
+	SeekPosition_SEEK_OFFSET    SeekPosition = 2
+	SeekPosition_SEEK_TIMESTAMP SeekPosition = 3
+)
+
+// Enum value maps for SeekPosition.
+var (
+	SeekPosition_name = map[int32]string{
+		0: "SEEK_BEGINNING",
+		1: "SEEK_END",
+		2: "SEEK_OFFSET",
+		3: "SEEK_TIMESTAMP",
+	}
+	SeekPosition_value = map[string]int32{
+		"SEEK_BEGINNING": 0,
+		"SEEK_END":       1,
+		"SEEK_OFFSET":    2,
+		"SEEK_TIMESTAMP": 3,
+	}
+)
+
+func (x SeekPosition) Enum() *SeekPosition {
+	p := new(SeekPosition)
+	*p = x
+	return p
+}
+
+func (x SeekPosition) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SeekPosition) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_qwerq_proto_enumTypes[0].Descriptor()
+}
+
+func (SeekPosition) Type() protoreflect.EnumType {
+	return &file_proto_qwerq_proto_enumTypes[0]
+}
+
+func (x SeekPosition) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SeekPosition.Descriptor instead.
+func (SeekPosition) EnumDescriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{0}
+}
+
 // PublishRequest is sent by client to publish a message.
 type PublishRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -1325,6 +1378,319 @@ func (x *AuthResponse) GetMessage() string {
 	return ""
 }
 
+// SeekRequest positions a stream consumer at a specific offset.
+type SeekRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	ConsumerGroup string                 `protobuf:"bytes,2,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"` // Consumer group name
+	Position      SeekPosition           `protobuf:"varint,3,opt,name=position,proto3,enum=qwerq.SeekPosition" json:"position,omitempty"`
+	Offset        uint64                 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`       // Used when position is OFFSET
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Unix millis, used when position is TIMESTAMP
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SeekRequest) Reset() {
+	*x = SeekRequest{}
+	mi := &file_proto_qwerq_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SeekRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SeekRequest) ProtoMessage() {}
+
+func (x *SeekRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SeekRequest.ProtoReflect.Descriptor instead.
+func (*SeekRequest) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SeekRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *SeekRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
+}
+
+func (x *SeekRequest) GetPosition() SeekPosition {
+	if x != nil {
+		return x.Position
+	}
+	return SeekPosition_SEEK_BEGINNING
+}
+
+func (x *SeekRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *SeekRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+// SeekResponse confirms the seek operation.
+type SeekResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Offset        uint64                 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"` // The resolved offset
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SeekResponse) Reset() {
+	*x = SeekResponse{}
+	mi := &file_proto_qwerq_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SeekResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SeekResponse) ProtoMessage() {}
+
+func (x *SeekResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SeekResponse.ProtoReflect.Descriptor instead.
+func (*SeekResponse) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SeekResponse) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+// CommitOffsetRequest commits a consumer group's offset.
+type CommitOffsetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	ConsumerGroup string                 `protobuf:"bytes,2,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
+	Offset        uint64                 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitOffsetRequest) Reset() {
+	*x = CommitOffsetRequest{}
+	mi := &file_proto_qwerq_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitOffsetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitOffsetRequest) ProtoMessage() {}
+
+func (x *CommitOffsetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitOffsetRequest.ProtoReflect.Descriptor instead.
+func (*CommitOffsetRequest) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CommitOffsetRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *CommitOffsetRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
+}
+
+func (x *CommitOffsetRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+// CommitOffsetResponse confirms the offset commit.
+type CommitOffsetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Offset        uint64                 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"` // The committed offset
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitOffsetResponse) Reset() {
+	*x = CommitOffsetResponse{}
+	mi := &file_proto_qwerq_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitOffsetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitOffsetResponse) ProtoMessage() {}
+
+func (x *CommitOffsetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitOffsetResponse.ProtoReflect.Descriptor instead.
+func (*CommitOffsetResponse) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CommitOffsetResponse) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+// StreamMessage is delivered to stream consumers (includes sequence number).
+type StreamMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MessageId     string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	Queue         string                 `protobuf:"bytes,2,opt,name=queue,proto3" json:"queue,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Sequence      uint64                 `protobuf:"varint,5,opt,name=sequence,proto3" json:"sequence,omitempty"`                          // Monotonic sequence number within the queue
+	PublishedAt   int64                  `protobuf:"varint,6,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"` // Unix timestamp millis
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamMessage) Reset() {
+	*x = StreamMessage{}
+	mi := &file_proto_qwerq_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamMessage) ProtoMessage() {}
+
+func (x *StreamMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_qwerq_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamMessage.ProtoReflect.Descriptor instead.
+func (*StreamMessage) Descriptor() ([]byte, []int) {
+	return file_proto_qwerq_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *StreamMessage) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *StreamMessage) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *StreamMessage) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *StreamMessage) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *StreamMessage) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *StreamMessage) GetPublishedAt() int64 {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return 0
+}
+
 var File_proto_qwerq_proto protoreflect.FileDescriptor
 
 const file_proto_qwerq_proto_rawDesc = "" +
@@ -1432,7 +1798,37 @@ const file_proto_qwerq_proto_rawDesc = "" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"B\n" +
 	"\fAuthResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessageB+Z)github.com/jonas/qwer-q/internal/protocolb\x06proto3"
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xb1\x01\n" +
+	"\vSeekRequest\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\x12%\n" +
+	"\x0econsumer_group\x18\x02 \x01(\tR\rconsumerGroup\x12/\n" +
+	"\bposition\x18\x03 \x01(\x0e2\x13.qwerq.SeekPositionR\bposition\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x04R\x06offset\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"&\n" +
+	"\fSeekResponse\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\x04R\x06offset\"j\n" +
+	"\x13CommitOffsetRequest\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\x12%\n" +
+	"\x0econsumer_group\x18\x02 \x01(\tR\rconsumerGroup\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x04R\x06offset\".\n" +
+	"\x14CommitOffsetResponse\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\x04R\x06offset\"\x96\x02\n" +
+	"\rStreamMessage\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\x12\x14\n" +
+	"\x05queue\x18\x02 \x01(\tR\x05queue\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\x12;\n" +
+	"\aheaders\x18\x04 \x03(\v2!.qwerq.StreamMessage.HeadersEntryR\aheaders\x12\x1a\n" +
+	"\bsequence\x18\x05 \x01(\x04R\bsequence\x12!\n" +
+	"\fpublished_at\x18\x06 \x01(\x03R\vpublishedAt\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*U\n" +
+	"\fSeekPosition\x12\x12\n" +
+	"\x0eSEEK_BEGINNING\x10\x00\x12\f\n" +
+	"\bSEEK_END\x10\x01\x12\x0f\n" +
+	"\vSEEK_OFFSET\x10\x02\x12\x12\n" +
+	"\x0eSEEK_TIMESTAMP\x10\x03B+Z)github.com/jonas/qwer-q/internal/protocolb\x06proto3"
 
 var (
 	file_proto_qwerq_proto_rawDescOnce sync.Once
@@ -1446,49 +1842,59 @@ func file_proto_qwerq_proto_rawDescGZIP() []byte {
 	return file_proto_qwerq_proto_rawDescData
 }
 
-var file_proto_qwerq_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_proto_qwerq_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_qwerq_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_proto_qwerq_proto_goTypes = []any{
-	(*PublishRequest)(nil),           // 0: qwerq.PublishRequest
-	(*PublishResponse)(nil),          // 1: qwerq.PublishResponse
-	(*ConsumeRequest)(nil),           // 2: qwerq.ConsumeRequest
-	(*HeartbeatRequest)(nil),         // 3: qwerq.HeartbeatRequest
-	(*HeartbeatResponse)(nil),        // 4: qwerq.HeartbeatResponse
-	(*UnsubscribeRequest)(nil),       // 5: qwerq.UnsubscribeRequest
-	(*Message)(nil),                  // 6: qwerq.Message
-	(*AckRequest)(nil),               // 7: qwerq.AckRequest
-	(*NackRequest)(nil),              // 8: qwerq.NackRequest
-	(*ErrorResponse)(nil),            // 9: qwerq.ErrorResponse
-	(*SchemaRegisterRequest)(nil),    // 10: qwerq.SchemaRegisterRequest
-	(*SchemaRegisterResponse)(nil),   // 11: qwerq.SchemaRegisterResponse
-	(*CallRequest)(nil),              // 12: qwerq.CallRequest
-	(*CallResponse)(nil),             // 13: qwerq.CallResponse
-	(*SchemaListRequest)(nil),        // 14: qwerq.SchemaListRequest
-	(*SchemaInfo)(nil),               // 15: qwerq.SchemaInfo
-	(*SchemaListResponse)(nil),       // 16: qwerq.SchemaListResponse
-	(*QueueListRequest)(nil),         // 17: qwerq.QueueListRequest
-	(*QueueInfo)(nil),                // 18: qwerq.QueueInfo
-	(*QueueListResponse)(nil),        // 19: qwerq.QueueListResponse
-	(*ExtendVisibilityRequest)(nil),  // 20: qwerq.ExtendVisibilityRequest
-	(*ExtendVisibilityResponse)(nil), // 21: qwerq.ExtendVisibilityResponse
-	(*AuthRequest)(nil),              // 22: qwerq.AuthRequest
-	(*AuthResponse)(nil),             // 23: qwerq.AuthResponse
-	nil,                              // 24: qwerq.PublishRequest.HeadersEntry
-	nil,                              // 25: qwerq.Message.HeadersEntry
-	nil,                              // 26: qwerq.CallRequest.HeadersEntry
-	nil,                              // 27: qwerq.CallResponse.HeadersEntry
+	(SeekPosition)(0),                // 0: qwerq.SeekPosition
+	(*PublishRequest)(nil),           // 1: qwerq.PublishRequest
+	(*PublishResponse)(nil),          // 2: qwerq.PublishResponse
+	(*ConsumeRequest)(nil),           // 3: qwerq.ConsumeRequest
+	(*HeartbeatRequest)(nil),         // 4: qwerq.HeartbeatRequest
+	(*HeartbeatResponse)(nil),        // 5: qwerq.HeartbeatResponse
+	(*UnsubscribeRequest)(nil),       // 6: qwerq.UnsubscribeRequest
+	(*Message)(nil),                  // 7: qwerq.Message
+	(*AckRequest)(nil),               // 8: qwerq.AckRequest
+	(*NackRequest)(nil),              // 9: qwerq.NackRequest
+	(*ErrorResponse)(nil),            // 10: qwerq.ErrorResponse
+	(*SchemaRegisterRequest)(nil),    // 11: qwerq.SchemaRegisterRequest
+	(*SchemaRegisterResponse)(nil),   // 12: qwerq.SchemaRegisterResponse
+	(*CallRequest)(nil),              // 13: qwerq.CallRequest
+	(*CallResponse)(nil),             // 14: qwerq.CallResponse
+	(*SchemaListRequest)(nil),        // 15: qwerq.SchemaListRequest
+	(*SchemaInfo)(nil),               // 16: qwerq.SchemaInfo
+	(*SchemaListResponse)(nil),       // 17: qwerq.SchemaListResponse
+	(*QueueListRequest)(nil),         // 18: qwerq.QueueListRequest
+	(*QueueInfo)(nil),                // 19: qwerq.QueueInfo
+	(*QueueListResponse)(nil),        // 20: qwerq.QueueListResponse
+	(*ExtendVisibilityRequest)(nil),  // 21: qwerq.ExtendVisibilityRequest
+	(*ExtendVisibilityResponse)(nil), // 22: qwerq.ExtendVisibilityResponse
+	(*AuthRequest)(nil),              // 23: qwerq.AuthRequest
+	(*AuthResponse)(nil),             // 24: qwerq.AuthResponse
+	(*SeekRequest)(nil),              // 25: qwerq.SeekRequest
+	(*SeekResponse)(nil),             // 26: qwerq.SeekResponse
+	(*CommitOffsetRequest)(nil),      // 27: qwerq.CommitOffsetRequest
+	(*CommitOffsetResponse)(nil),     // 28: qwerq.CommitOffsetResponse
+	(*StreamMessage)(nil),            // 29: qwerq.StreamMessage
+	nil,                              // 30: qwerq.PublishRequest.HeadersEntry
+	nil,                              // 31: qwerq.Message.HeadersEntry
+	nil,                              // 32: qwerq.CallRequest.HeadersEntry
+	nil,                              // 33: qwerq.CallResponse.HeadersEntry
+	nil,                              // 34: qwerq.StreamMessage.HeadersEntry
 }
 var file_proto_qwerq_proto_depIdxs = []int32{
-	24, // 0: qwerq.PublishRequest.headers:type_name -> qwerq.PublishRequest.HeadersEntry
-	25, // 1: qwerq.Message.headers:type_name -> qwerq.Message.HeadersEntry
-	26, // 2: qwerq.CallRequest.headers:type_name -> qwerq.CallRequest.HeadersEntry
-	27, // 3: qwerq.CallResponse.headers:type_name -> qwerq.CallResponse.HeadersEntry
-	15, // 4: qwerq.SchemaListResponse.schemas:type_name -> qwerq.SchemaInfo
-	18, // 5: qwerq.QueueListResponse.queues:type_name -> qwerq.QueueInfo
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	30, // 0: qwerq.PublishRequest.headers:type_name -> qwerq.PublishRequest.HeadersEntry
+	31, // 1: qwerq.Message.headers:type_name -> qwerq.Message.HeadersEntry
+	32, // 2: qwerq.CallRequest.headers:type_name -> qwerq.CallRequest.HeadersEntry
+	33, // 3: qwerq.CallResponse.headers:type_name -> qwerq.CallResponse.HeadersEntry
+	16, // 4: qwerq.SchemaListResponse.schemas:type_name -> qwerq.SchemaInfo
+	19, // 5: qwerq.QueueListResponse.queues:type_name -> qwerq.QueueInfo
+	0,  // 6: qwerq.SeekRequest.position:type_name -> qwerq.SeekPosition
+	34, // 7: qwerq.StreamMessage.headers:type_name -> qwerq.StreamMessage.HeadersEntry
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_proto_qwerq_proto_init() }
@@ -1504,13 +1910,14 @@ func file_proto_qwerq_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_qwerq_proto_rawDesc), len(file_proto_qwerq_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   28,
+			NumEnums:      1,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proto_qwerq_proto_goTypes,
 		DependencyIndexes: file_proto_qwerq_proto_depIdxs,
+		EnumInfos:         file_proto_qwerq_proto_enumTypes,
 		MessageInfos:      file_proto_qwerq_proto_msgTypes,
 	}.Build()
 	File_proto_qwerq_proto = out.File

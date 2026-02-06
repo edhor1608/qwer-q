@@ -18,6 +18,7 @@ type Message struct {
 	PublishedAt time.Time         `json:"published_at"`
 	VisibleAt   time.Time         `json:"visible_at"`
 	OrderingKey string            `json:"ordering_key,omitempty"`
+	Sequence    uint64            `json:"sequence,omitempty"` // Stream mode: monotonic sequence number
 }
 
 var (

@@ -31,6 +31,19 @@ const (
 	OpCallResponse        OpCode = 0x21
 )
 
+// Stream operations (client -> server)
+const (
+	OpSeek         OpCode = 0x50
+	OpCommitOffset OpCode = 0x51
+)
+
+// Stream operations (server -> client)
+const (
+	OpSeekAck         OpCode = 0x52
+	OpCommitOffsetAck OpCode = 0x53
+	OpStreamMessage   OpCode = 0x54
+)
+
 // Admin operations
 const (
 	OpSchemaList     OpCode = 0x30
@@ -58,6 +71,11 @@ var opCodeNames = map[OpCode]string{
 	OpHeartbeat:           "HEARTBEAT",
 	OpUnsubscribe:         "UNSUBSCRIBE",
 	OpHeartbeatAck:        "HEARTBEAT_ACK",
+	OpSeek:                "SEEK",
+	OpCommitOffset:        "COMMIT_OFFSET",
+	OpSeekAck:             "SEEK_ACK",
+	OpCommitOffsetAck:     "COMMIT_OFFSET_ACK",
+	OpStreamMessage:       "STREAM_MESSAGE",
 	OpSchemaRegister:      "SCHEMA_REGISTER",
 	OpSchemaGet:           "SCHEMA_GET",
 	OpSchemaResponse:      "SCHEMA_RESPONSE",

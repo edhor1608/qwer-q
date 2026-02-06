@@ -232,6 +232,103 @@ func MessageToProto(msg *Message) *protocol.Message {
 	}
 }
 
+// HandleStreamPublish processes a publish to a stream queue.
+func (b *Broker) HandleStreamPublish(req *protocol.PublishRequest) (*protocol.PublishResponse, uint64, error) {
+	// Memory pressure checks (same as queue mode)
+	payloadSize := len(req.GetPayload())
+	if payloadSize > LargeMessageThreshold {
+		if err := b.CheckMemoryPressureEager(); err != nil {
+			return nil, 0, err
+		}
+	} else {
+		if err := b.CheckMemoryPressure(); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	if b.dedup != nil {
+		if err := b.dedup.Check(req.GetIdempotencyKey()); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	msgID := req.GetMessageId()
+	if msgID == "" {
+		msgID = NewULID()
+	}
+
+	msg := &Message{
+		ID:          msgID,
+		Queue:       req.GetQueue(),
+		Payload:     req.GetPayload(),
+		Headers:     req.GetHeaders(),
+		Attempt:     0,
+		PublishedAt: time.Now(),
+	}
+
+	sq := b.GetOrCreateStreamQueue(req.GetQueue())
+	seq, err := sq.Publish(msg)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return &protocol.PublishResponse{MessageId: msgID}, seq, nil
+}
+
+// HandleSeek processes a seek request for a stream consumer.
+func (b *Broker) HandleSeek(req *protocol.SeekRequest) (uint64, error) {
+	sq := b.GetStreamQueue(req.GetQueue())
+	if sq == nil {
+		return 0, ErrQueueFull // reuse existing error for "not found" (TODO: proper error)
+	}
+
+	var offset uint64
+	switch req.GetPosition() {
+	case protocol.SeekPosition_SEEK_BEGINNING:
+		offset = 1
+	case protocol.SeekPosition_SEEK_END:
+		offset = sq.NextSequence()
+	case protocol.SeekPosition_SEEK_OFFSET:
+		offset = req.GetOffset()
+	case protocol.SeekPosition_SEEK_TIMESTAMP:
+		if sq.storage != nil {
+			ts, err := sq.storage.GetStreamMessageByTimestamp(sq.name, req.GetTimestamp())
+			if err != nil {
+				return 0, err
+			}
+			if ts == 0 {
+				offset = sq.NextSequence() // no message found, start at end
+			} else {
+				offset = ts
+			}
+		}
+	}
+
+	sq.Seek(req.GetConsumerGroup(), offset)
+	return offset, nil
+}
+
+// HandleCommitOffset processes an offset commit request.
+func (b *Broker) HandleCommitOffset(req *protocol.CommitOffsetRequest) error {
+	sq := b.GetStreamQueue(req.GetQueue())
+	if sq == nil {
+		return ErrQueueFull
+	}
+	return sq.CommitOffset(req.GetConsumerGroup(), req.GetOffset())
+}
+
+// StreamMessageToProto converts a Message to a protocol StreamMessage.
+func StreamMessageToProto(msg *Message) *protocol.StreamMessage {
+	return &protocol.StreamMessage{
+		MessageId:   msg.ID,
+		Queue:       msg.Queue,
+		Payload:     msg.Payload,
+		Headers:     msg.Headers,
+		Sequence:    msg.Sequence,
+		PublishedAt: msg.PublishedAt.UnixMilli(),
+	}
+}
+
 // EncodeError creates an error response frame.
 func EncodeError(code uint32, message string) []byte {
 	resp := &protocol.ErrorResponse{Code: code, Message: message}
