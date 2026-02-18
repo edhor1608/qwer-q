@@ -13,7 +13,7 @@ QWER-Q is a **queue**, not a stream. Think RabbitMQ, not Kafka.
 
 ## Queues
 
-A queue is a named destination for messages. Queues are auto-created when a schema is registered for them.
+A queue is a named destination for messages. Queues are auto-created on first publish in `permissive` mode, or when a schema is registered and used in `strict` mode.
 
 ```
 Producer → [Queue: "orders"] → Consumer
@@ -27,7 +27,7 @@ Key properties:
 ## Producers
 
 A producer publishes messages to a queue. Every published message:
-1. Is validated against the queue's registered schema
+1. Is validated against the queue's registered schema (if present)
 2. Receives a ULID (Universally Unique Lexicographically Sortable Identifier) if no custom ID is provided
 3. Is persisted to disk before the publish acknowledgment is sent
 
@@ -47,7 +47,11 @@ Each message is delivered to exactly one consumer. If that consumer fails to ack
 
 ## Schemas
 
-QWER-Q uses Protocol Buffers (Protobuf) for schema validation. Every queue must have a registered schema before messages can be published.
+QWER-Q uses Protocol Buffers (Protobuf) for schema validation.
+
+Schema enforcement is configurable:
+- `permissive` (default): queues can accept publishes without a schema
+- `strict`: publishes are rejected unless a schema is registered for the queue
 
 **Workflow:**
 1. Define your message type in a `.proto` file
@@ -56,7 +60,7 @@ QWER-Q uses Protocol Buffers (Protobuf) for schema validation. Every queue must 
 
 **Schema evolution**: Backward-compatible changes are allowed (adding optional fields, deprecating fields). Breaking changes (removing fields, changing types) are rejected.
 
-**Why schema-first?** In microservice architectures, untyped messages are a constant source of bugs. QWER-Q makes typing the default, not an afterthought.
+**Why strict mode?** In microservice architectures, untyped messages are a constant source of bugs. Strict mode enforces schema-first workflows when you need hard guarantees.
 
 ## Visibility Timeout
 

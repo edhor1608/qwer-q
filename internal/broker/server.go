@@ -26,6 +26,17 @@ type Replicator interface {
 	ReplicateNack(queue, messageID string, requeue bool) error
 }
 
+// SchemaMode controls how publishes behave when no schema is registered.
+type SchemaMode string
+
+const (
+	// SchemaModePermissive allows publishes to queues without registered schemas.
+	// If a schema exists, payload validation is still enforced.
+	SchemaModePermissive SchemaMode = "permissive"
+	// SchemaModeStrict requires a schema to be registered before publish.
+	SchemaModeStrict SchemaMode = "strict"
+)
+
 // Server is a TCP server for the broker.
 type Server struct {
 	broker     *Broker
@@ -35,16 +46,18 @@ type Server struct {
 	wg         sync.WaitGroup
 	done       chan struct{}
 	ready      chan struct{} // closed when server is listening
-	authToken  string       // if set, clients must authenticate before any other operation
+	authToken  string        // if set, clients must authenticate before any other operation
+	schemaMode SchemaMode
 }
 
 // NewServer creates a new server with the given broker.
 func NewServer(broker *Broker) *Server {
 	return &Server{
-		broker:   broker,
-		registry: schema.NewRegistry(),
-		done:     make(chan struct{}),
-		ready:    make(chan struct{}),
+		broker:     broker,
+		registry:   schema.NewRegistry(),
+		done:       make(chan struct{}),
+		ready:      make(chan struct{}),
+		schemaMode: SchemaModePermissive,
 	}
 }
 
@@ -60,6 +73,15 @@ func (s *Server) SetAuthToken(token string) {
 	s.authToken = token
 }
 
+// SetSchemaMode configures schema enforcement behavior for publishes.
+func (s *Server) SetSchemaMode(mode SchemaMode) {
+	switch mode {
+	case SchemaModeStrict:
+		s.schemaMode = SchemaModeStrict
+	default:
+		s.schemaMode = SchemaModePermissive
+	}
+}
 
 // Registry returns the schema registry.
 func (s *Server) Registry() *schema.Registry {
@@ -245,8 +267,14 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 		return EncodeError(2, "invalid request")
 	}
 
-	// DEC-013: Queue only exists if schema is registered
-	// Validate message against schema
+	if s.schemaMode == SchemaModeStrict {
+		if _, err := s.registry.Get(req.GetQueue()); err != nil {
+			return EncodeError(7, "schema required for queue")
+		}
+	}
+
+	// Validate message against schema if present. In permissive mode, queues
+	// without schemas are accepted.
 	if err := s.registry.Validate(req.GetQueue(), req.GetPayload()); err != nil {
 		return EncodeError(5, "schema validation failed: "+err.Error())
 	}
@@ -697,7 +725,6 @@ func (s *Server) handleUnsubscribe(payload []byte, state *connState) []byte {
 	state.groupName = ""
 	return nil
 }
-
 
 func (s *Server) handleCall(payload []byte, state *connState) []byte {
 	var req protocol.CallRequest

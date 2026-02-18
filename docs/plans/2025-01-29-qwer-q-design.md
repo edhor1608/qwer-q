@@ -180,11 +180,12 @@ tRPC-inspired "actions over MQ".
 | **Allowed** | Add optional fields, deprecate |
 | **Rejected** | Remove fields, change types |
 
-### 13. Queue Creation: Auto with Schema Binding
+### 13. Queue Creation: Mode-Dependent
 | Aspect | Decision |
 |--------|----------|
-| **Model** | Register schema first, queue auto-creates on first publish |
-| **Unknown queue** | Rejected (no schema = no queue) |
+| **Permissive mode** | Queue auto-creates on first publish |
+| **Strict mode** | Schema must be registered before publish |
+| **Unknown queue (strict)** | Rejected (no schema = no queue) |
 
 ### 14. Failed Messages: Configurable, DLQ Default
 | Aspect | Decision |

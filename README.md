@@ -25,6 +25,7 @@ QWER-Q fills the gap: simple deployment, real durability, types as a first-class
 
 - Single binary, single container
 - Built-in schema registry with protobuf validation
+- Configurable schema enforcement mode: `permissive` (default) or `strict`
 - At-least-once delivery with visibility timeouts
 - Dead letter queues for failed messages
 - Request/reply (RPC) pattern support
@@ -67,6 +68,7 @@ qwer-q serve [flags]
   -p, --port int          broker port (default 9876)
       --metrics-port int  metrics port (default 9877)
       --data-dir string   data directory for persistence
+      --schema-mode string  schema enforcement: permissive|strict (default permissive)
 
 # List queues
 qwer-q queue list
@@ -126,7 +128,7 @@ Prometheus metrics available at `:9877/metrics`:
 
 - Single binary, single container
 - `docker run` and it works
-- Typed-by-default (schema registry built-in)
+- Typed queue contracts (schema registry built-in, strict mode available)
 - At-least-once delivery
 - Sub-millisecond latency
 - Durable (survives restarts)

@@ -66,7 +66,7 @@ This guide gets you from zero to a running broker with your first message publis
    ```
 
    <Aside>
-   Schemas are required before publishing. This ensures every message on a queue is valid according to the registered Protobuf definition.
+   Schemas are optional in default `permissive` mode, but recommended. If a schema is registered for a queue, the broker validates every published message against the Protobuf definition and rejects invalid payloads. For schema-first enforcement, start the broker with `--schema-mode strict`.
    </Aside>
 
 5. **Publish a message**

@@ -3,7 +3,7 @@ title: Configuration
 description: All QWER-Q configuration flags, environment variables, and defaults.
 ---
 
-QWER-Q follows a "docker run and it works" philosophy. All configuration is via CLI flags. No config files required.
+QWER-Q follows a "docker run and it works" philosophy. Configuration is primarily via CLI flags, with a few environment variable overrides.
 
 ## Broker Flags (`qwer-q serve`)
 
@@ -13,6 +13,14 @@ QWER-Q follows a "docker run and it works" philosophy. All configuration is via 
 | `--metrics-port` | `9877` | HTTP port for Prometheus metrics and health endpoint |
 | `--data-dir` | `/data` | Directory for BadgerDB persistence. Set empty to disable persistence (in-memory only). |
 | `--max-message-size` | `1MB` | Maximum allowed message payload size. Accepts suffixes: `B`, `KB`, `MB`, `GB`. |
+| `--schema-mode` | `permissive` | Schema enforcement mode: `permissive` (no schema required) or `strict` (schema required before publish). |
+
+## Environment Variable Overrides
+
+| Variable | Equivalent Flag | Description |
+|----------|------------------|-------------|
+| `QWERQ_AUTH_TOKEN` | `--auth-token` | Shared token required for client authentication |
+| `QWERQ_SCHEMA_MODE` | `--schema-mode` | Schema enforcement mode (`permissive` or `strict`) |
 
 ## Size Format
 

@@ -76,7 +76,7 @@ v1.0 is suitable for single-node deployments with moderate throughput requiremen
 **Possible causes:**
 1. **Queue is empty** — Check `qwer-q queue list` for message count
 2. **All messages are in-flight** — Other consumers have claimed them. Check `IN-FLIGHT` column
-3. **Schema not registered** — Messages can't be published without a schema
+3. **Strict schema mode enabled** — In `--schema-mode strict`, messages can't be published without a registered schema
 4. **Wrong queue name** — Queue names are case-sensitive
 5. **Connection issue** — The consumer's TCP connection may have dropped
 

@@ -31,6 +31,7 @@ func init() {
 	serveCmd.Flags().String("max-message-size", "1MB", "maximum message payload size (e.g., 1MB, 512KB)")
 	serveCmd.Flags().Duration("batch-interval", 0, "write batch flush interval (e.g., 5ms). 0 = no batching")
 	serveCmd.Flags().String("auth-token", "", "require clients to authenticate with this token (env: QWERQ_AUTH_TOKEN)")
+	serveCmd.Flags().String("schema-mode", "permissive", "schema enforcement mode: permissive or strict (env: QWERQ_SCHEMA_MODE)")
 
 	// Clustering flags
 	serveCmd.Flags().String("cluster-node-id", "", "unique node ID for clustering (enables cluster mode)")
@@ -50,8 +51,19 @@ func runServe(cmd *cobra.Command, args []string) error {
 	maxMsgSize, _ := cmd.Flags().GetString("max-message-size")
 	batchInterval, _ := cmd.Flags().GetDuration("batch-interval")
 	authToken, _ := cmd.Flags().GetString("auth-token")
+	schemaModeStr, _ := cmd.Flags().GetString("schema-mode")
 	if authToken == "" {
 		authToken = os.Getenv("QWERQ_AUTH_TOKEN")
+	}
+	if !cmd.Flags().Changed("schema-mode") {
+		if envMode := os.Getenv("QWERQ_SCHEMA_MODE"); envMode != "" {
+			schemaModeStr = envMode
+		}
+	}
+
+	schemaMode, err := parseSchemaMode(schemaModeStr)
+	if err != nil {
+		return err
 	}
 	addr := fmt.Sprintf(":%d", port)
 	metricsAddr := fmt.Sprintf(":%d", metricsPort)
@@ -92,6 +104,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if authToken != "" {
 		srv.SetAuthToken(authToken)
 	}
+	srv.SetSchemaMode(schemaMode)
 	metricsSrv := broker.NewMetricsServer(metricsAddr)
 
 	// Register REST API on the same HTTP server as metrics
@@ -154,12 +167,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Start metrics server
 	go metricsSrv.ListenAndServe()
 
-	printBanner(addr, metricsAddr, version, authToken != "")
+	printBanner(addr, metricsAddr, version, authToken != "", schemaMode)
 
 	return srv.ListenAndServe(addr)
 }
 
-func printBanner(brokerAddr, metricsAddr, ver string, authEnabled bool) {
+func printBanner(brokerAddr, metricsAddr, ver string, authEnabled bool, schemaMode broker.SchemaMode) {
 	authStatus := "WARNING: Running without authentication - not for production"
 	if authEnabled {
 		authStatus = "Authentication enabled"
@@ -168,8 +181,9 @@ func printBanner(brokerAddr, metricsAddr, ver string, authEnabled bool) {
 QWER-Q Message Queue v%s
 Listening on %s (broker), %s (metrics)
 %s
+Schema mode: %s
 
-`, ver, brokerAddr, metricsAddr, authStatus)
+`, ver, brokerAddr, metricsAddr, authStatus, schemaMode)
 }
 
 // parseSize parses a size string like "1MB", "512KB", "1024" into bytes.
@@ -212,4 +226,15 @@ func parseSize(s string) (int64, error) {
 	}
 
 	return size, nil
+}
+
+func parseSchemaMode(s string) (broker.SchemaMode, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", string(broker.SchemaModePermissive):
+		return broker.SchemaModePermissive, nil
+	case string(broker.SchemaModeStrict):
+		return broker.SchemaModeStrict, nil
+	default:
+		return "", fmt.Errorf("invalid schema-mode %q (expected permissive or strict)", s)
+	}
 }

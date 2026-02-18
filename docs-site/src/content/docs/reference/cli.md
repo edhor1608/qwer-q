@@ -29,6 +29,7 @@ qwer-q serve [flags]
 | `--metrics-port` | | `9877` | Metrics/health HTTP port |
 | `--data-dir` | | `/data` | Data directory for BadgerDB persistence |
 | `--max-message-size` | | `1MB` | Maximum message payload size (e.g., `1MB`, `512KB`, `2GB`) |
+| `--schema-mode` | | `permissive` | Schema enforcement mode: `permissive` or `strict` |
 
 ### Examples
 
@@ -44,6 +45,9 @@ qwer-q serve --data-dir ./my-data
 
 # Allow larger messages
 qwer-q serve --max-message-size 10MB
+
+# Require schemas before publish
+qwer-q serve --schema-mode strict
 ```
 
 ---

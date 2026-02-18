@@ -334,7 +334,7 @@ Backward compatible as default.
 
 ## DEC-013: Auto-Create Queues with Schema Binding
 **Date:** 2025-01-29
-**Status:** Decided
+**Status:** Superseded by DEC-026
 
 ### Context
 Queue creation model:
@@ -356,6 +356,13 @@ Auto-create queues only when schema is registered for that queue name.
 - First publish to queue creates it if schema exists
 - Publish to unknown queue name → error
 - Provides typo protection and enforces schema-first workflow
+
+### Superseded Notes (2026-02-12)
+This decision was later generalized to support two runtime modes:
+- `permissive`: publish without schema is allowed (default)
+- `strict`: publish without schema is rejected
+
+See DEC-026.
 
 ---
 
@@ -673,3 +680,35 @@ Monitor memory usage, reject publishes with "memory pressure" error when high.
 - New error: "memory pressure: server under load, try again later"
 - Broker remains responsive under load
 - Clients should implement backoff on this error
+
+---
+
+## DEC-026: Dual Schema Enforcement Modes
+**Date:** 2026-02-12
+**Status:** Decided
+
+### Context
+The product needs to support two valid use cases:
+1. Fast adoption and ad-hoc queues without mandatory schema setup
+2. Schema-first workflows with hard publish-time guarantees
+
+The codebase and docs had diverged between these two models.
+
+### Decision
+Support explicit schema enforcement modes:
+- `permissive` (default): publish is allowed even if no schema is registered
+- `strict`: publish is rejected when no schema is registered
+
+In both modes, if a schema is registered, payload validation is enforced.
+
+### Rationale
+- Preserves ease-of-use for standalone queue workflows
+- Enables strict typed contracts where required
+- Avoids forcing one workflow across all deployments
+- Keeps behavior explicit via configuration (`--schema-mode`)
+
+### Consequences
+- New broker setting: `schema-mode` (`permissive|strict`)
+- CLI/env support: `--schema-mode`, `QWERQ_SCHEMA_MODE`
+- Documentation must describe mode-dependent queue creation and publish behavior
+- Tests must cover both permissive and strict semantics

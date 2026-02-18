@@ -23,7 +23,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 		`docker run -p 9876:9876 qwer-q` — that's it. No config files, no external dependencies, no ops burden.
 	</Card>
 	<Card title="Typed by Default" icon="approve-check">
-		Built-in schema registry with Protobuf validation. Producers can only publish valid messages.
+		Built-in schema registry with Protobuf validation. Run with `--schema-mode strict` to require schemas before publish.
 	</Card>
 	<Card title="Durable" icon="document">
 		BadgerDB persistence survives broker restarts. Configurable sync interval for your durability/throughput tradeoff.
