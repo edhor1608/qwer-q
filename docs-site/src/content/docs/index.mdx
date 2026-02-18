@@ -26,7 +26,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 		Built-in schema registry with Protobuf validation. Run with `--schema-mode strict` to require schemas before publish.
 	</Card>
 	<Card title="Durable" icon="document">
-		BadgerDB persistence survives broker restarts. Configurable sync interval for your durability/throughput tradeoff.
+		BadgerDB persistence survives broker restarts. Runtime write batching (`--batch-interval`) lets you tune durability/throughput tradeoffs.
 	</Card>
 	<Card title="Lightweight" icon="star">
 		Single Go binary. Runs in a 512MB container. ~5K msgs/sec with persistence enabled.

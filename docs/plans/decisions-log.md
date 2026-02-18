@@ -585,9 +585,9 @@ Layered: thin core + optional smart layer.
 
 ---
 
-## DEC-022: Queue Size 100k Default
+## DEC-022: Queue Size 100k Default (Historical Proposal)
 **Date:** 2026-02-01
-**Status:** Decided
+**Status:** Superseded by DEC-027
 
 ### Context
 Original `DefaultMaxQueueSize = 10,000` was too conservative. Benchmarks showed queue filling in ~2 seconds at 5k msgs/sec, causing 19k errors.
@@ -595,7 +595,7 @@ Original `DefaultMaxQueueSize = 10,000` was too conservative. Benchmarks showed 
 Original math assumed 10KB messages with 3x BadgerDB overhead. Reality: most messages are 1KB or less.
 
 ### Decision
-Increase `DefaultMaxQueueSize` from 10,000 to 100,000 messages.
+Historical proposal: increase `DefaultMaxQueueSize` from 10,000 to 100,000 messages.
 
 ### Rationale
 - 100k × 1KB × 3x overhead = 300MB, safe for 512MB container
@@ -608,17 +608,21 @@ Increase `DefaultMaxQueueSize` from 10,000 to 100,000 messages.
 - More messages buffered before rejection
 - May need tuning for smaller containers
 
+### Superseded Notes (2026-02-18)
+Current implementation baseline is `DefaultMaxQueueSize = 10_000`.
+This entry is retained as historical exploration, not current behavior.
+
 ---
 
-## DEC-023: Consumer Channel Buffer 100
+## DEC-023: Consumer Channel Buffer 100 (Historical Proposal)
 **Date:** 2026-02-01
-**Status:** Decided
+**Status:** Not adopted
 
 ### Context
 Consumer channel had buffer of 1, limiting prefetch to single message. Consumer had to ack before receiving next message.
 
 ### Decision
-Increase consumer channel buffer from 1 to 100 messages.
+Historical proposal: increase consumer channel buffer from 1 to 100 messages.
 
 ### Rationale
 - Enables prefetching — consumer can receive messages while processing
@@ -631,11 +635,14 @@ Increase consumer channel buffer from 1 to 100 messages.
 - Higher memory per consumer connection
 - Faster message delivery
 
+### Notes (2026-02-18)
+Current queue consumer channel buffer remains `1`. This entry documents a considered optimization, not shipped behavior.
+
 ---
 
-## DEC-024: Configurable Sync Interval (Default 100ms)
+## DEC-024: Configurable Sync Interval (Historical Proposal)
 **Date:** 2026-02-01
-**Status:** Decided
+**Status:** Partially adopted
 
 ### Context
 BadgerDB sync (fsync) was happening every write, limiting throughput. Options:
@@ -644,7 +651,7 @@ BadgerDB sync (fsync) was happening every write, limiting throughput. Options:
 3. Manual sync — maximum throughput, application controls
 
 ### Decision
-Configurable sync interval via `--sync-interval` CLI flag. Default 100ms (safe). Benchmarks use 1s.
+Historical proposal: configurable sync interval via `--sync-interval` CLI flag. Default 100ms (safe). Benchmarks use 1s.
 
 ### Rationale
 - 1s sync is standard for databases (PostgreSQL default)
@@ -657,6 +664,9 @@ Configurable sync interval via `--sync-interval` CLI flag. Default 100ms (safe).
 - Default: 100ms (reasonable durability)
 - Benchmarking: 1s (prioritize throughput)
 - Production critical: 0 (sync every write)
+
+### Notes (2026-02-18)
+Current implementation has compile-time sync interval default (`100ms`) and runtime write batching (`--batch-interval`), but no `--sync-interval` serve flag.
 
 ---
 
@@ -712,3 +722,30 @@ In both modes, if a schema is registered, payload validation is enforced.
 - CLI/env support: `--schema-mode`, `QWERQ_SCHEMA_MODE`
 - Documentation must describe mode-dependent queue creation and publish behavior
 - Tests must cover both permissive and strict semantics
+
+---
+
+## DEC-027: Truth-Synced Operational Baseline
+**Date:** 2026-02-18
+**Status:** Decided
+
+### Context
+Roadmap and decision docs had drifted from shipped behavior after rapid feature merges.
+
+### Decision
+Use code-as-source-of-truth for operational defaults and claim docs must reflect implemented behavior:
+- Default queue size: `10_000`
+- Consumer channel buffer: `1`
+- Sync interval: compile-time default `100ms`
+- Runtime throughput control: `--batch-interval`
+- Stream/clustering marked preview until hardening gates are complete
+
+### Rationale
+- Prevent credibility drift between docs and implementation
+- Make operational behavior unambiguous for new users
+- Separate historical experiments from shipped guarantees
+
+### Consequences
+- Decision log entries that are exploratory or superseded must be explicitly labeled
+- Docs and README must classify features as stable vs preview
+- Benchmark and performance claims must remain reproducible and conservative

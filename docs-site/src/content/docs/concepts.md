@@ -5,10 +5,10 @@ description: Core concepts of QWER-Q — queues, consumers, schemas, visibility 
 
 ## Mental Model
 
-QWER-Q is a **queue**, not a stream. Think RabbitMQ, not Kafka.
+QWER-Q is queue-first by default, with optional stream mode (preview).
 
-- Messages are **consumed and deleted** after acknowledgment
-- Multiple consumers on the same queue get **round-robin** distribution
+- Queue mode: messages are **consumed and deleted** after acknowledgment
+- Stream mode (preview): messages are retained with offset-based reads
 - Delivery guarantee: **at-least-once**
 
 ## Queues
@@ -20,8 +20,8 @@ Producer → [Queue: "orders"] → Consumer
 ```
 
 Key properties:
-- **Max size**: 10,000 messages by default (configurable). Publishes are rejected with an error when the queue is full.
-- **FIFO ordering**: Best-effort FIFO. Messages are delivered in publish order when possible.
+- **Max size**: 10,000 messages by default. Publishes are rejected with an error when the queue is full.
+- **FIFO ordering**: Strict FIFO at queue head for normal queue delivery.
 - **Persistence**: All messages are persisted to BadgerDB and survive broker restarts.
 
 ## Producers
