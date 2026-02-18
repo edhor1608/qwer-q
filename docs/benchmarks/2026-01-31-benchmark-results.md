@@ -1,5 +1,9 @@
 # Benchmark Results - 2026-01-31
 
+> Historical exploratory run.  
+> Contains known adapter issues and is not a release-facing benchmark source.  
+> Use `docs/benchmarks/CLAIMS-POLICY.md` before citing these numbers externally.
+
 ## Test Environment
 - **Platform:** Docker containers with identical resource limits
 - **CPU:** 1 core per container
