@@ -19,7 +19,7 @@ type Replicator interface {
 	IsLeader() bool
 	// ReplicatePublish replicates a publish through Raft consensus.
 	// Returns the message ID assigned by the FSM.
-	ReplicatePublish(queue, messageID string, payload []byte, headers map[string]string, publishedAt time.Time) (string, error)
+	ReplicatePublish(queue, messageID string, payload []byte, headers map[string]string, publishedAt time.Time, stream bool) (string, error)
 	// ReplicateAck replicates an ack through Raft consensus.
 	ReplicateAck(queue, messageID string) error
 	// ReplicateNack replicates a nack through Raft consensus.
@@ -292,7 +292,12 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 		}
 
 		replicatedID, err := s.replicator.ReplicatePublish(
-			req.GetQueue(), msgID, req.GetPayload(), req.GetHeaders(), time.Now(),
+			req.GetQueue(),
+			msgID,
+			req.GetPayload(),
+			req.GetHeaders(),
+			time.Now(),
+			s.broker.IsStreamQueue(req.GetQueue()),
 		)
 		if err != nil {
 			LogError("replicated publish failed", err, "queue", req.GetQueue(), "client", clientAddr)

@@ -138,7 +138,7 @@ func TestPublishReplication(t *testing.T) {
 	}
 
 	// Publish a message through Raft
-	msgID, err := leader.ReplicatePublish("test-queue", "msg-001", []byte("hello cluster"), nil, time.Now())
+	msgID, err := leader.ReplicatePublish("test-queue", "msg-001", []byte("hello cluster"), nil, time.Now(), false)
 	if err != nil {
 		t.Fatalf("replicate publish failed: %v", err)
 	}
@@ -157,6 +157,53 @@ func TestPublishReplication(t *testing.T) {
 		}
 		if q.Len() != 1 {
 			t.Fatalf("node %d: expected 1 message, got %d", i, q.Len())
+		}
+	}
+}
+
+func TestPublishReplicationStreamMode(t *testing.T) {
+	nodes, brokers, cleanup := startTestCluster(t)
+	defer cleanup()
+
+	err := nodes[0].WaitForLeader(10 * time.Second)
+	if err != nil {
+		t.Fatalf("leader election failed: %v", err)
+	}
+
+	// Find the leader
+	var leader *Node
+	for _, n := range nodes {
+		if n.IsLeader() {
+			leader = n
+			break
+		}
+	}
+	if leader == nil {
+		t.Fatal("no leader found")
+	}
+
+	// Replicate as stream-mode publish.
+	msgID, err := leader.ReplicatePublish("stream-queue", "stream-msg-001", []byte("hello stream cluster"), nil, time.Now(), true)
+	if err != nil {
+		t.Fatalf("replicate stream publish failed: %v", err)
+	}
+	if msgID != "stream-msg-001" {
+		t.Fatalf("expected message ID stream-msg-001, got %s", msgID)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	// All nodes should have stream queue state; none should create regular queue state.
+	for i, b := range brokers {
+		sq := b.GetStreamQueue("stream-queue")
+		if sq == nil {
+			t.Fatalf("node %d: stream queue not found", i)
+		}
+		if sq.Len() != 1 {
+			t.Fatalf("node %d: expected 1 stream message, got %d", i, sq.Len())
+		}
+		if q := b.GetQueue("stream-queue"); q != nil {
+			t.Fatalf("node %d: unexpected regular queue created for stream queue", i)
 		}
 	}
 }
@@ -183,7 +230,7 @@ func TestNonLeaderRejectWrites(t *testing.T) {
 	}
 
 	// Attempt to write on follower should fail
-	_, err = follower.ReplicatePublish("test-queue", "msg-001", []byte("should fail"), nil, time.Now())
+	_, err = follower.ReplicatePublish("test-queue", "msg-001", []byte("should fail"), nil, time.Now(), false)
 	if err != ErrNotLeader {
 		t.Fatalf("expected ErrNotLeader, got %v", err)
 	}
@@ -211,7 +258,7 @@ func TestFailover(t *testing.T) {
 	}
 
 	// Publish a message before failover
-	_, err = nodes[leaderIdx].ReplicatePublish("failover-queue", "msg-before", []byte("before failover"), nil, time.Now())
+	_, err = nodes[leaderIdx].ReplicatePublish("failover-queue", "msg-before", []byte("before failover"), nil, time.Now(), false)
 	if err != nil {
 		t.Fatalf("publish before failover failed: %v", err)
 	}
@@ -240,7 +287,7 @@ func TestFailover(t *testing.T) {
 	}
 
 	// New leader should be able to accept writes
-	_, err = newLeader.ReplicatePublish("failover-queue", "msg-after", []byte("after failover"), nil, time.Now())
+	_, err = newLeader.ReplicatePublish("failover-queue", "msg-after", []byte("after failover"), nil, time.Now(), false)
 	if err != nil {
 		t.Fatalf("publish after failover failed: %v", err)
 	}
@@ -294,6 +341,41 @@ func TestFSMApplyPublish(t *testing.T) {
 	}
 	if q.Len() != 1 {
 		t.Fatalf("expected 1 message, got %d", q.Len())
+	}
+}
+
+func TestFSMApplyPublishStream(t *testing.T) {
+	b := broker.NewBroker()
+	defer b.Close()
+
+	fsm := NewFSM(b, testLogger())
+
+	pubCmd := PublishCommand{
+		Queue:       "fsm-stream-queue",
+		MessageID:   "stream-msg-100",
+		Payload:     []byte("stream payload"),
+		PublishedAt: time.Now().UnixMilli(),
+		Stream:      true,
+	}
+	data, _ := json.Marshal(pubCmd)
+	cmd := Command{Type: CmdPublish, Data: data}
+	cmdData, _ := json.Marshal(cmd)
+
+	resp := fsm.Apply(makeRaftLog(cmdData))
+	fsmResp := resp.(*FSMResponse)
+	if fsmResp.Error != nil {
+		t.Fatalf("FSM stream publish failed: %v", fsmResp.Error)
+	}
+
+	sq := b.GetStreamQueue("fsm-stream-queue")
+	if sq == nil {
+		t.Fatal("stream queue not created")
+	}
+	if sq.Len() != 1 {
+		t.Fatalf("expected 1 stream message, got %d", sq.Len())
+	}
+	if q := b.GetQueue("fsm-stream-queue"); q != nil {
+		t.Fatal("regular queue should not be created for stream publish")
 	}
 }
 
@@ -386,6 +468,53 @@ func TestFSMSnapshotRestore(t *testing.T) {
 	}
 }
 
+func TestFSMRestoreClearsExistingState(t *testing.T) {
+	b := broker.NewBroker()
+	defer b.Close()
+
+	// Seed stale state.
+	q := b.GetOrCreateQueue("stale-queue")
+	if err := q.Enqueue(&broker.Message{
+		ID:          "stale-msg",
+		Queue:       "stale-queue",
+		Payload:     []byte("stale"),
+		PublishedAt: time.Now(),
+		VisibleAt:   time.Now(),
+	}); err != nil {
+		t.Fatalf("seed stale queue failed: %v", err)
+	}
+	b.GetOrCreateStreamQueue("stale-stream")
+
+	fsm := NewFSM(b, testLogger())
+	snapshot := fsmSnapshot{
+		Queues: map[string][]*snapshotMessage{
+			"fresh-queue": nil,
+		},
+		StreamQueues: []string{"fresh-stream"},
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+
+	if err := fsm.Restore(&mockReadCloser{data: data}); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
+
+	if b.GetQueue("stale-queue") != nil {
+		t.Fatal("stale regular queue should be removed during restore")
+	}
+	if b.GetStreamQueue("stale-stream") != nil {
+		t.Fatal("stale stream queue should be removed during restore")
+	}
+	if b.GetQueue("fresh-queue") == nil {
+		t.Fatal("fresh queue from snapshot not restored")
+	}
+	if b.GetStreamQueue("fresh-stream") == nil {
+		t.Fatal("fresh stream queue from snapshot not restored")
+	}
+}
+
 func TestParsePeer(t *testing.T) {
 	tests := []struct {
 		input   string
@@ -428,9 +557,9 @@ func (s *mockSnapshotSink) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (s *mockSnapshotSink) Close() error   { return nil }
-func (s *mockSnapshotSink) ID() string     { return "mock" }
-func (s *mockSnapshotSink) Cancel() error  { return nil }
+func (s *mockSnapshotSink) Close() error  { return nil }
+func (s *mockSnapshotSink) ID() string    { return "mock" }
+func (s *mockSnapshotSink) Cancel() error { return nil }
 
 // mockReadCloser wraps a byte slice as io.ReadCloser.
 type mockReadCloser struct {

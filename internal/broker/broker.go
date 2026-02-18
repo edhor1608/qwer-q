@@ -167,6 +167,15 @@ func (b *Broker) Close() {
 	}
 }
 
+// ResetForRestore clears in-memory queue state before FSM snapshot restore.
+// Storage content is not modified; the caller is responsible for reconcile strategy.
+func (b *Broker) ResetForRestore() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.queues = make(map[string]*Queue)
+	b.streamQueues = make(map[string]*StreamQueue)
+}
+
 // Storage returns the storage backend (may be nil).
 func (b *Broker) Storage() storage.Storage {
 	return b.storage

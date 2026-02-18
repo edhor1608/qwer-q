@@ -11,13 +11,14 @@ const defaultApplyTimeout = 5 * time.Second
 
 // ReplicatePublish replicates a message publish through Raft consensus.
 // The message is committed to a majority of nodes before returning.
-func (n *Node) ReplicatePublish(queue, messageID string, payload []byte, headers map[string]string, publishedAt time.Time) (string, error) {
+func (n *Node) ReplicatePublish(queue, messageID string, payload []byte, headers map[string]string, publishedAt time.Time, stream bool) (string, error) {
 	pubCmd := PublishCommand{
 		Queue:       queue,
 		MessageID:   messageID,
 		Payload:     payload,
 		Headers:     headers,
 		PublishedAt: publishedAt.UnixMilli(),
+		Stream:      stream,
 	}
 
 	data, err := json.Marshal(pubCmd)
