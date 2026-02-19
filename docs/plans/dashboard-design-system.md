@@ -633,7 +633,6 @@ When `prefers-reduced-motion: reduce`:
 ## CSS Custom Properties (Full Token Export)
 
 ```css
-
 :root {
   /* === Backgrounds === */
   --bg-root: #0d0d0d;

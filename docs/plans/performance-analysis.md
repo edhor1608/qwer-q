@@ -648,7 +648,8 @@ For a publish operation taking ~300us currently:
 Instead of FFI, run Rust as a separate process:
 
 **Architecture:**
-```
+
+```text
 Client -> TCP -> Go Broker (queue logic, routing)
                       |
                       v
