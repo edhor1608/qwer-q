@@ -207,13 +207,13 @@ func init() {
 }
 
 func NewULID() string {
-    id := runtime_procPin() % numShards  // or use goroutine ID hash
+    shardIdx := runtime_procPin() % numShards  // or use goroutine ID hash
     runtime_procUnpin()
-    s := &shards[id]
+    s := &shards[shardIdx]
     s.mu.Lock()
-    id := ulid.MustNew(ulid.Timestamp(time.Now()), s.entropy)
+    ulidID := ulid.MustNew(ulid.Timestamp(time.Now()), s.entropy)
     s.mu.Unlock()
-    return id.String()
+    return ulidID.String()
 }
 ```
 

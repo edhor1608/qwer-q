@@ -14,6 +14,36 @@ The dashboard is a **control surface**, not a marketing page. Every pixel serves
 3. **Typographic hierarchy** — Information architecture through type, not color
 4. **Terminal heritage** — Monospace roots, precision alignment
 
+## Problem
+
+- Define a consistent visual system for a live, operator-focused dashboard.
+- Prevent ad-hoc styles from weakening scan speed and alert clarity.
+- Keep implementation aligned with qwer-q's utilitarian product identity.
+
+## What We Tried
+
+- Reviewed terminal-inspired and observability-heavy UI systems.
+- Compared high-accent palettes with restrained chroma for status signaling.
+- Tested typography mixes for dense tables, metrics, and inspectors.
+
+## Research Findings
+
+- Dense layout plus stable hierarchy improves first-glance diagnosis.
+- Limited accent color usage reduces alert fatigue during prolonged sessions.
+- Explicit contrast budgeting is required to keep dark UIs accessible.
+
+## Design Decisions
+
+- Adopt warm-neutral dark surfaces with a single amber brand accent.
+- Use monospace for operational values/IDs and sans-serif for structure/labels.
+- Reserve vivid status colors for state transitions and actionable alerts.
+
+## Lessons Learned
+
+- Motion should communicate system state changes, not decoration.
+- Information hierarchy should be expressed by type scale before color.
+- Accessibility constraints must stay measurable and documented.
+
 ---
 
 ## Color System
@@ -603,6 +633,7 @@ When `prefers-reduced-motion: reduce`:
 ## CSS Custom Properties (Full Token Export)
 
 ```css
+
 :root {
   /* === Backgrounds === */
   --bg-root: #0d0d0d;
@@ -755,6 +786,7 @@ When `prefers-reduced-motion: reduce`:
     --duration-slow: 0ms;
   }
 }
+
 ```
 
 ---
