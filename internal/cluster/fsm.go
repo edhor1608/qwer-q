@@ -26,7 +26,7 @@ const (
 
 // Command is a replicated log entry applied to the FSM.
 type Command struct {
-	Type CommandType `json:"type"`
+	Type CommandType     `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
 
@@ -37,6 +37,7 @@ type PublishCommand struct {
 	Payload     []byte            `json:"payload"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	PublishedAt int64             `json:"published_at"` // UnixMilli
+	Stream      bool              `json:"stream,omitempty"`
 }
 
 // AckCommand replicates a message ack.
@@ -103,6 +104,8 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		return f.applyNack(cmd.Data)
 	case CmdCreateQueue:
 		return f.applyCreateQueue(cmd.Data)
+	case CmdDeleteQueue:
+		return &FSMResponse{Error: fmt.Errorf("delete queue not implemented")}
 	case CmdSchemaRegister:
 		return f.applySchemaRegister(cmd.Data)
 	default:
@@ -124,6 +127,14 @@ func (f *FSM) applyPublish(data json.RawMessage) *FSMResponse {
 		Attempt:     0,
 		PublishedAt: time.UnixMilli(cmd.PublishedAt),
 		VisibleAt:   time.UnixMilli(cmd.PublishedAt),
+	}
+
+	if cmd.Stream {
+		sq := f.broker.GetOrCreateStreamQueue(cmd.Queue)
+		if _, err := sq.Publish(msg); err != nil {
+			return &FSMResponse{Error: err}
+		}
+		return &FSMResponse{MessageID: cmd.MessageID}
 	}
 
 	q := f.broker.GetOrCreateQueue(cmd.Queue)
@@ -205,10 +216,15 @@ func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
 	// Capture current queue names and their messages
 	queues := f.broker.ListQueues()
 	snapshot := &fsmSnapshot{
-		Queues: make(map[string][]*snapshotMessage),
+		Queues:       make(map[string][]*snapshotMessage),
+		StreamQueues: make([]string, 0),
 	}
 
 	for _, name := range queues {
+		if sq := f.broker.GetStreamQueue(name); sq != nil {
+			snapshot.StreamQueues = append(snapshot.StreamQueues, sq.Name())
+			continue
+		}
 		q := f.broker.GetQueue(name)
 		if q == nil {
 			continue
@@ -220,6 +236,9 @@ func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
 	// If storage is available, snapshot from storage (more complete)
 	if f.broker.Storage() != nil {
 		for _, name := range queues {
+			if f.broker.GetStreamQueue(name) != nil {
+				continue
+			}
 			msgs, err := f.broker.Storage().LoadMessages(name)
 			if err != nil {
 				f.logger.Error("snapshot: failed to load messages", "queue", name, "error", err)
@@ -251,6 +270,13 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 		return fmt.Errorf("decode snapshot: %w", err)
 	}
 
+	// Snapshot restore replaces prior in-memory state.
+	f.broker.ResetForRestore()
+
+	for _, name := range snapshot.StreamQueues {
+		f.broker.GetOrCreateStreamQueue(name)
+	}
+
 	// Re-create queues and enqueue messages
 	for name, msgs := range snapshot.Queues {
 		q := f.broker.GetOrCreateQueue(name)
@@ -266,7 +292,9 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 			}
 			q.EnqueueDirect(msg)
 			if f.broker.Storage() != nil {
-				f.broker.Storage().SaveMessage(msg)
+				if err := f.broker.Storage().SaveMessage(msg); err != nil {
+					return fmt.Errorf("persist restored message %s: %w", msg.ID, err)
+				}
 			}
 		}
 	}
@@ -287,7 +315,8 @@ type snapshotMessage struct {
 
 // fsmSnapshot implements raft.FSMSnapshot.
 type fsmSnapshot struct {
-	Queues map[string][]*snapshotMessage `json:"queues"`
+	Queues       map[string][]*snapshotMessage `json:"queues"`
+	StreamQueues []string                      `json:"stream_queues,omitempty"`
 }
 
 // Persist writes the snapshot to the given sink.
