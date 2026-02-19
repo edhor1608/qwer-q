@@ -13,6 +13,37 @@ This document evaluates consensus and replication strategies for adding clusteri
 
 **Key finding:** For a queue (messages deleted after ack), Raft's strong consistency is essential. Eventually-consistent replication risks duplicate delivery or message loss. The latency overhead of Raft (1-3ms per commit on local network) is acceptable given qwer-q's current ~2-5K msgs/sec throughput.
 
+## Problem Statement
+
+- Add clustering and failover without violating queue delivery guarantees.
+- Preserve durable publish/ack behavior during node failure.
+- Keep architecture aligned with qwer-q's single-binary operational model.
+
+## What Was Tried
+
+- Compared Raft, gossip-only replication, primary-backup, and multi-Raft designs.
+- Evaluated Go libraries: `hashicorp/raft`, `etcd-io/raft`, and `lni/dragonboat`.
+- Reviewed failover patterns: protocol redirect, proxy forwarding, DNS indirection, and client seed lists.
+
+## Research Findings
+
+- Production message systems converge on Raft for durable write coordination.
+- Gossip protocols fit discovery and health metadata, not queue data replication.
+- A single Raft group is the lowest-risk path for current throughput targets.
+
+## Design Decisions
+
+- Choose `hashicorp/raft` as the consensus engine.
+- Start with `raft-boltdb` for log storage, keep `raft-wal` as migration path.
+- Route write operations through deterministic FSM apply paths.
+- Use protocol-level leader redirect first, add proxy mode later if needed.
+
+## Lessons Learned
+
+- Correctness and operability matter more than peak throughput in phase 1.
+- Avoid coupling Raft internals too tightly to message storage internals.
+- Defer multi-Raft until measured write bottlenecks justify the complexity.
+
 ---
 
 ## 1. Consensus Algorithm Comparison
@@ -205,7 +236,7 @@ Rationale:
 
 The FSM is the core integration point. qwer-q's broker state must be expressed as a deterministic state machine:
 
-```
+```go
 Apply(log *raft.Log) interface{}   // Apply a committed log entry
 Snapshot() (FSMSnapshot, error)    // Capture current state
 Restore(io.ReadCloser) error       // Restore from snapshot
@@ -249,7 +280,8 @@ Rationale:
 ### 4.2 Protocol Changes
 
 New opcode needed:
-```
+
+```text
 REDIRECT (0x20) — Response when client sends write to non-leader
   Payload: leader_host:leader_port (string)
 ```
@@ -426,6 +458,7 @@ This means the `--sync-interval` trade-off becomes less critical in clustered mo
 **Decision: Single Raft group for Phase 1-2. Multi-Raft as Phase 3 option.**
 
 ### Single Raft Group (Recommended Start)
+
 - One leader for all queues on the cluster
 - Simpler implementation, simpler operations
 - Leader is single point for writes (scales vertically with hardware)
@@ -433,6 +466,7 @@ This means the `--sync-interval` trade-off becomes less critical in clustered mo
 - This is how rqlite works, and it handles thousands of writes/sec
 
 ### Multi-Raft (Future)
+
 - Each queue (or group of queues) gets its own Raft group
 - Different queues can have leaders on different nodes (write distribution)
 - Needed when: single leader can't handle write volume across all queues

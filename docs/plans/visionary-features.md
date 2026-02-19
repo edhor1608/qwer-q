@@ -4,6 +4,38 @@
 
 Every message queue since IBM MQSeries (1993) follows the same pattern: producer puts message in a box, consumer takes it out. Thirty years of the same idea with different paint. What if we didn't?
 
+## Knowledge Capture
+
+### Problem Statement
+
+- Identify long-term broker primitives that can create real differentiation.
+- Explore concepts beyond incremental parity with existing queue systems.
+- Stress-test product imagination while keeping technical feasibility visible.
+
+### What Was Tried
+
+- Generated and pressure-tested multiple "paradigm shift" feature concepts.
+- Scored each idea by feasibility and impact to avoid pure novelty bias.
+- Added implementation sketches to force concrete design thinking.
+
+### Research Findings
+
+- Most "novel" queue ideas fail without a clear operational model.
+- Concepts with observability and contract-safety hooks have stronger practical value.
+- Single-node feasibility is often high; clustered semantics are the main complexity multiplier.
+
+### Design Decisions
+
+- Keep this document explicitly exploratory and separate from near-term roadmap commitments.
+- Preserve feasibility/impact scoring to anchor creativity in engineering reality.
+- Prefer ideas that can be staged incrementally rather than all-or-nothing rewrites.
+
+### Lessons Learned
+
+- Vision work is useful when it sharpens constraints, not only when it adds features.
+- The best speculative ideas still need migration and failure-mode stories.
+- Maintaining a clear boundary between "vision" and "plan" protects delivery credibility.
+
 ---
 
 ## The Features (sorted by wow factor)
@@ -295,7 +327,8 @@ This turns "we think our system handles failures" into "we proved it."
 Pact-style contract testing, but native to the message broker.
 
 Consumers register "contracts" — declarations of what message shape they can handle:
-```
+
+```text
 REGISTER_CONTRACT consumer=payment-service queue=orders expects={amount: number, currency: string}
 ```
 

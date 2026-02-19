@@ -4,6 +4,36 @@
 **Analysts:** C/C++ Expert, Rust Expert, ThePrimeagen (performance panel)
 **Codebase:** QWER-Q at commit `d7c354d` (post W-010 fix)
 
+## Problem Statement
+
+- Publish and ack paths have avoidable latency and allocation overhead.
+- Throughput targets are constrained by per-message storage and serialization costs.
+- Optimization work needs ranking by measured impact, not intuition.
+
+## What Was Tried
+
+- Profiled broker hot paths across publish, ack, schema validation, and frame encode.
+- Ranked bottlenecks by estimated impact and implementation complexity.
+- Cross-checked proposed fixes against storage and queue semantics constraints.
+
+## Research Findings
+
+- Per-message Badger transactions dominate end-to-end publish cost.
+- ACK delete scan and JSON encoding are secondary but meaningful contributors.
+- Allocation-heavy code paths are widespread but mostly incremental wins.
+
+## Design Decisions
+
+- Prioritize write batching before micro-optimizations.
+- Keep deterministic broker semantics unchanged while reducing per-message overhead.
+- Treat lock/cache-line tuning as follow-up work after larger I/O wins land.
+
+## Lessons Learned
+
+- Batching strategy drives the largest practical gains for this architecture.
+- Hot-path cleanup should be sequenced by impact to avoid churn.
+- Profiling-backed decisions make performance work easier to justify and maintain.
+
 ---
 
 ## Current Bottleneck Ranking (by Impact)
@@ -486,7 +516,7 @@ Every publish does: `Enqueue` -> `SaveMessage` -> respond. The `SaveMessage` is 
 
 ### Proposed Design
 
-```
+```text
 Publisher goroutines:
     [msg1] ─┐
     [msg2] ─┤─> Batch Accumulator ──> BatchWrite (one txn per batch)

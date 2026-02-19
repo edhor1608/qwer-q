@@ -11,6 +11,36 @@ QWER-Q's CLI is functional but minimal. It covers the basics (serve, queue list,
 
 **Overall Grade: D+** — It works, but the developer experience is an afterthought.
 
+## Problem
+
+- Core protocol capabilities are not exposed through the CLI surface.
+- Current output and error UX slows local testing and automation adoption.
+- Default command ergonomics require too much repeated flag/config setup.
+
+## What We Tried
+
+- Audited CLI commands in `cmd/qwer-q/` against protocol operations.
+- Compared output/error ergonomics with `gh`, `docker`, `kubectl`, and `fly`.
+- Mapped missing DX primitives to concrete implementation tasks and effort.
+
+## Research Findings
+
+- Best-in-class CLIs provide `--json`, shell completion, env/config fallback, and actionable errors by default.
+- Adoption friction is highest when "first publish/consume" requires writing code.
+- Most identified fixes are low-complexity and can be delivered incrementally.
+
+## Design Decisions
+
+- Prioritize P0 CLI usability fixes before adding polish features.
+- Keep command structure explicit (`queue`, `schema`) and add missing core flows.
+- Frame Go client upgrades around reliability basics: context, timeouts, and reconnection.
+
+## Lessons Learned
+
+- A technically capable broker can still feel incomplete without developer-first UX.
+- Small interface choices (defaults, examples, output mode) strongly affect credibility.
+- DX debt is best tracked as product debt, not just tooling debt.
+
 ---
 
 ## Grades by Area
@@ -59,13 +89,15 @@ No command supports `--json` for machine-readable output. This blocks:
 - Monitoring scripts
 
 **Before (current):**
-```
+
+```text
 NAME      MESSAGES  IN-FLIGHT
 orders    42        3
 events    100       0
 ```
 
 **After (with --json):**
+
 ```json
 [
   {"name": "orders", "messages": 42, "in_flight": 3},
@@ -284,21 +316,21 @@ Set via `-ldflags` at build time.
 
 ### P1 — Should Fix (Improves DX Significantly)
 
-5. **Add environment variable support** — `QWER_BROKER` at minimum.
-6. **Add shell completion** — Free from Cobra, ~10 lines.
-7. **Add config file support** — `~/.config/qwer-q/config.yaml` via Viper.
-8. **Improve help text** — Add examples to every command.
-9. **Fix Go client library** — Add context support, timeouts, missing methods.
-10. **Expose missing client methods** — `Nack`, `ExtendVisibility`, `Call`.
+1. **Add environment variable support** — `QWER_BROKER` at minimum.
+2. **Add shell completion** — Free from Cobra, ~10 lines.
+3. **Add config file support** — `~/.config/qwer-q/config.yaml` via Viper.
+4. **Improve help text** — Add examples to every command.
+5. **Fix Go client library** — Add context support, timeouts, missing methods.
+6. **Expose missing client methods** — `Nack`, `ExtendVisibility`, `Call`.
 
 ### P2 — Nice to Have (Polish)
 
-11. **Add `--quiet` and `--verbose` flags** — For scripting and debugging.
-12. **Add color-coded output** — Errors in red, warnings in yellow.
-13. **Check for `protoc` before schema register** — Friendly error.
-14. **Add build metadata to version** — Commit hash, build date.
-15. **Fix serve banner** — Remove leading newline, show config summary.
-16. **Add `queue create`, `queue delete`, `queue purge` commands** — Complete admin story.
+1. **Add `--quiet` and `--verbose` flags** — For scripting and debugging.
+2. **Add color-coded output** — Errors in red, warnings in yellow.
+3. **Check for `protoc` before schema register** — Friendly error.
+4. **Add build metadata to version** — Commit hash, build date.
+5. **Fix serve banner** — Remove leading newline, show config summary.
+6. **Add `queue create`, `queue delete`, `queue purge` commands** — Complete admin story.
 
 ---
 

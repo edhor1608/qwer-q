@@ -18,6 +18,24 @@ Anti-principles (things we will NOT do):
 - No modals for navigation -- modals are for confirmations only
 - No "dashboards of dashboards" -- one screen hierarchy, one URL scheme
 
+## Problem Statement
+
+- Operators need queue health context in seconds, not after drilling through raw metrics.
+- Existing broker surfaces were CLI-first and lacked live operational visibility.
+- The UX must fit both incident response and day-to-day queue inspection.
+
+## Research & Alternatives
+
+- Compared dense table-first admin UIs versus card-first operational overviews.
+- Evaluated static polling dashboards versus live WebSocket-driven updates.
+- Reviewed common message-broker dashboards and identified overload patterns to avoid.
+
+## Lessons Learned
+
+- Glanceability beats feature density for first-screen UX.
+- Progressive disclosure prevents operator fatigue while preserving depth.
+- Real-time movement cues are useful only when motion is restrained and meaningful.
+
 ---
 
 ## Screen Inventory

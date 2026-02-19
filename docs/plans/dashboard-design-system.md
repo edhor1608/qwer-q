@@ -771,9 +771,9 @@ When `prefers-reduced-motion: reduce`:
 ### Accessibility
 
 - All color contrasts meet WCAG AA (4.5:1 for text, 3:1 for UI components) against their respective backgrounds
-- `--text-primary` on `--bg-root`: 18.4:1
-- `--text-secondary` on `--bg-root`: 8.5:1
-- `--amber-400` on `--bg-root`: 7.2:1
+- `--text-primary` on `--bg-root`: 15.86:1
+- `--text-secondary` on `--bg-root`: 6.82:1
+- `--amber-400` on `--bg-root`: 9.59:1
 - Focus indicators: 2px `--border-strong` outline with 2px offset
 - All interactive elements are keyboard-accessible
 - Screen reader labels for status dots and sparklines

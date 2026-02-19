@@ -21,7 +21,7 @@ Producer → [Queue: "orders"] → Consumer
 
 Key properties:
 - **Max size**: 10,000 messages by default. Publishes are rejected with an error when the queue is full.
-- **FIFO ordering**: Strict FIFO at queue head for normal queue delivery.
+- **FIFO ordering**: FIFO for initial delivery; redelivery after visibility timeout or `NACK` can change global order.
 - **Persistence**: All messages are persisted to BadgerDB and survive broker restarts.
 
 ## Producers
