@@ -20,8 +20,8 @@ QWER-Q is a good fit when you need:
 ### When should I NOT use QWER-Q?
 
 Consider alternatives if you need:
-- **Event streaming / replay** — Use Kafka or Redpanda (stream mode planned for v2.0)
-- **Multi-node clustering** — QWER-Q v1 is single-node (clustering planned for v2.0)
+- **Battle-tested event streaming at scale** — Kafka/Redpanda are still stronger for that class of workload
+- **Battle-tested multi-node HA today** — clustering exists in QWER-Q but is currently preview
 - **Exactly-once delivery** — QWER-Q provides at-least-once with optional idempotency
 - **200K+ messages/sec** — NATS or Kafka will be faster for raw throughput
 - **Complex routing** — RabbitMQ has more routing options (exchanges, topic routing, etc.)
@@ -34,10 +34,14 @@ For effective exactly-once processing, use the `idempotency_key` field to dedupl
 
 ### Is QWER-Q production-ready?
 
-v1.0 is suitable for single-node deployments with moderate throughput requirements. Key limitations:
-- No authentication (planned for v1.1)
-- Single-node only (clustering planned for v2.0)
-- No official client libraries outside of Go (TypeScript planned for v1.2)
+Single-node queue mode is production-ready for moderate throughput workloads.
+
+Current maturity by area:
+- Queue mode (core publish/consume/ack/nack): stable
+- Auth/token enforcement: stable
+- TypeScript client: available
+- Stream mode: preview
+- Clustering (Raft): preview
 
 ---
 
@@ -138,20 +142,18 @@ If memory is consistently high:
 
 ### What throughput can I expect?
 
-Benchmarked on a 512 MB container with 1 CPU:
+It depends mostly on message size, consumer speed, and durability settings.
 
-| Sync Interval | Throughput | Data Loss Risk |
-|---------------|-----------|----------------|
-| 1 second | ~5,000 msgs/sec | Up to 1s on crash |
-| 100ms (default) | ~2,000 msgs/sec | Up to 100ms on crash |
-| Every write | ~500 msgs/sec | None |
-
-Throughput scales roughly linearly with CPU and message size.
+In practice on 1 vCPU / 512MB containers, queue workloads often land in the low-thousands msgs/sec range with persistence enabled. Use the benchmark harness in `bench/` for your exact profile.
 
 ### How does QWER-Q compare to NATS?
 
 NATS achieves ~133K msgs/sec but without persistence by default. QWER-Q trades raw speed for durability and schema validation — different design goals for different use cases.
 
-### Can I tune the sync interval?
+### Can I tune durability vs throughput?
 
-Currently the sync interval is set at compile time (100ms default). A runtime-configurable `--sync-interval` flag is planned. For now, you can build from source with a modified `DefaultSyncInterval` in `internal/storage/badger.go`.
+Yes:
+- `--batch-interval` controls write batching at runtime (`0` disables batching)
+- Badger sync interval is currently compile-time (`internal/storage/badger.go`, default 100ms)
+
+For strictest durability semantics, keep batching off (`--batch-interval=0`).

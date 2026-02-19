@@ -13,7 +13,15 @@ QWER-Q follows a "docker run and it works" philosophy. Configuration is primaril
 | `--metrics-port` | `9877` | HTTP port for Prometheus metrics and health endpoint |
 | `--data-dir` | `/data` | Directory for BadgerDB persistence. Set empty to disable persistence (in-memory only). |
 | `--max-message-size` | `1MB` | Maximum allowed message payload size. Accepts suffixes: `B`, `KB`, `MB`, `GB`. |
+| `--batch-interval` | `0` | Write batch flush interval. `0` disables batching. |
+| `--auth-token` | _(empty)_ | Shared token required for client authentication. |
 | `--schema-mode` | `permissive` | Schema enforcement mode: `permissive` (no schema required) or `strict` (schema required before publish). |
+| `--cluster-node-id` | _(empty)_ | Enable cluster mode for this node (preview). |
+| `--cluster-bind` | `0.0.0.0:9878` | Raft bind address (preview). |
+| `--cluster-advertise` | _(empty)_ | Raft advertise address (defaults to bind) (preview). |
+| `--cluster-peers` | _(none)_ | Initial peers in `id=host:port` format (preview). |
+| `--cluster-data-dir` | `<data-dir>/raft` | Raft data directory (preview). |
+| `--cluster-bootstrap` | `false` | Bootstrap a new cluster (preview). |
 
 ## Environment Variable Overrides
 
@@ -99,6 +107,7 @@ These values are compiled into the broker and not currently configurable via fla
 |------|----------|---------|
 | 9876 | TCP | Broker protocol (custom binary) |
 | 9877 | HTTP | Prometheus metrics (`/metrics`) and health check (`/health`) |
+| 9878 | TCP | Raft transport in cluster mode (preview) |
 
 ## Docker Volumes
 
@@ -108,17 +117,17 @@ These values are compiled into the broker and not currently configurable via fla
 
 ## Performance Tuning
 
-### Sync Interval Trade-offs
+### Write Batching Trade-offs
 
-The sync interval controls how often BadgerDB fsyncs data to disk:
+`--batch-interval` controls how long writes are accumulated before a flush.
 
-| Interval | Throughput | Max Data Loss on Crash |
-|----------|-----------|----------------------|
-| `0` (every write) | ~500 msgs/sec | None |
-| `100ms` (default) | ~2,000 msgs/sec | 100ms of writes |
-| `1s` | ~5,000 msgs/sec | 1 second of writes |
+| `--batch-interval` | Effect |
+|--------------------|--------|
+| `0` | No batching (lower throughput, simplest durability semantics) |
+| `5ms` to `20ms` | Common throughput boost with low extra delay |
+| `100ms+` | Higher throughput, larger buffering window |
 
-For most use cases, the default 100ms provides a good balance. Increase to `1s` for higher throughput workloads where some data loss on crash is acceptable.
+Badger's sync interval is currently compile-time (`internal/storage/badger.go`, default `100ms`).
 
 ### Container Sizing
 

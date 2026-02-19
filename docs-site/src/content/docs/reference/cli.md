@@ -29,7 +29,15 @@ qwer-q serve [flags]
 | `--metrics-port` | | `9877` | Metrics/health HTTP port |
 | `--data-dir` | | `/data` | Data directory for BadgerDB persistence |
 | `--max-message-size` | | `1MB` | Maximum message payload size (e.g., `1MB`, `512KB`, `2GB`) |
+| `--batch-interval` | | `0` | Write batch flush interval (e.g., `5ms`). `0` disables batching |
+| `--auth-token` | | `""` | Require clients to authenticate with this token |
 | `--schema-mode` | | `permissive` | Schema enforcement mode: `permissive` or `strict` |
+| `--cluster-node-id` | | `""` | Enable cluster mode with this node ID (preview) |
+| `--cluster-bind` | | `0.0.0.0:9878` | Raft bind address (preview) |
+| `--cluster-advertise` | | `""` | Raft advertised address (defaults to bind) |
+| `--cluster-peers` | | none | Initial peers in `id=host:port` format (preview) |
+| `--cluster-data-dir` | | `<data-dir>/raft` | Raft state directory (preview) |
+| `--cluster-bootstrap` | | `false` | Bootstrap a new cluster (preview) |
 
 ### Examples
 
@@ -46,8 +54,18 @@ qwer-q serve --data-dir ./my-data
 # Allow larger messages
 qwer-q serve --max-message-size 10MB
 
+# Enable token auth
+qwer-q serve --auth-token super-secret
+
 # Require schemas before publish
 qwer-q serve --schema-mode strict
+
+# Enable preview cluster mode
+qwer-q serve \
+  --cluster-node-id node-1 \
+  --cluster-bind 0.0.0.0:9878 \
+  --cluster-advertise 10.0.0.10:9878 \
+  --cluster-bootstrap
 ```
 
 ---

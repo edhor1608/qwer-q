@@ -191,18 +191,30 @@ Logs are written using Go's `slog` package with a JSON handler. Collect them wit
 
 ### Security
 
-**QWER-Q v1.0 has no authentication.** The broker warns about this on startup:
+Token auth is available and recommended for production:
+
+```bash
+qwer-q serve --auth-token "$QWERQ_AUTH_TOKEN"
+```
+
+Or via environment variable:
+
+```bash
+QWERQ_AUTH_TOKEN=your-shared-secret qwer-q serve
+```
+
+If auth is not configured, the broker warns on startup:
 
 ```
 Warning: Running without authentication - not for production
 ```
 
-For now, restrict access at the network level:
+Network-level controls are still required:
 - Run in a private network or behind a firewall
 - Use Docker networks to limit which containers can reach the broker
 - Don't expose port 9876 to the public internet
 
-Authentication (token-based auth) is planned for v1.1.
+mTLS is not built in yet.
 
 ### Backup & Recovery
 
@@ -231,7 +243,7 @@ kind: Deployment
 metadata:
   name: qwer-q
 spec:
-  replicas: 1  # Single node only in v1
+  replicas: 1  # Recommended default; cluster mode is preview and configured separately
   selector:
     matchLabels:
       app: qwer-q
@@ -305,4 +317,4 @@ spec:
       storage: 10Gi
 ```
 
-**Important:** QWER-Q v1 is single-node only. Do not set `replicas` greater than 1 — there is no built-in replication or consensus. Clustering is planned for v2.0.
+**Important:** default deployments should run `replicas: 1` (single-node mode). Clustering exists behind explicit cluster flags and is currently preview.

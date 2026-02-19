@@ -28,9 +28,12 @@ QWER-Q fills the gap: simple deployment, real durability, types as a first-class
 - Configurable schema enforcement mode: `permissive` (default) or `strict`
 - At-least-once delivery with visibility timeouts
 - Dead letter queues for failed messages
-- Request/reply (RPC) pattern support
+- Consumer groups and ordering keys
+- Stream mode (preview)
+- Raft-based clustering (preview)
+- Token auth (`--auth-token` / `QWERQ_AUTH_TOKEN`)
+- REST API + embedded dashboard on metrics port
 - Prometheus metrics endpoint
-- Sub-millisecond latency
 
 ## Architecture
 
@@ -46,7 +49,7 @@ QWER-Q fills the gap: simple deployment, real durability, types as a first-class
 | |Schema|Dedup |  |
 | |Reg.  |      |  |
 | +------+------+  |
-| |    Queues   |  |
+| | Queues/Stream| |
 | +-------------+  |
 +--------+---------+
          |
@@ -55,8 +58,13 @@ QWER-Q fills the gap: simple deployment, real durability, types as a first-class
 +------------------+
 
 +------------------+
-|  Metrics Server  |  :9877
-|   (Prometheus)   |
+|  HTTP Server     |  :9877
+| metrics/api/ws   |
+| dashboard        |
++------------------+
+
++------------------+
+|  Raft (optional) |  :9878
 +------------------+
 ```
 
@@ -69,6 +77,14 @@ qwer-q serve [flags]
       --metrics-port int  metrics port (default 9877)
       --data-dir string   data directory for persistence
       --schema-mode string  schema enforcement: permissive|strict (default permissive)
+      --batch-interval duration  write batch flush interval (default 0 = off)
+      --auth-token string  require client auth token
+      --cluster-node-id string   enable clustering mode (preview)
+      --cluster-bind string      raft bind addr (default 0.0.0.0:9878)
+      --cluster-advertise string raft advertised addr
+      --cluster-peers strings    initial peers id=host:port
+      --cluster-data-dir string  raft data dir
+      --cluster-bootstrap        bootstrap new cluster
 
 # List queues
 qwer-q queue list
@@ -93,9 +109,7 @@ services:
       - "9876:9876"
       - "9877:9877"
     volumes:
-      - qwer-q-data:/var/lib/qwer-q
-    environment:
-      - QWERQ_DATA_DIR=/var/lib/qwer-q
+      - qwer-q-data:/data
 volumes:
   qwer-q-data:
 ```
@@ -122,23 +136,23 @@ Prometheus metrics available at `:9877/metrics`:
 - `qwerq_messages_acked_total` - Total acknowledged messages
 - `qwerq_messages_nacked_total` - Total negative-acknowledged messages
 - `qwerq_queue_depth` - Current queue depth by queue name
-- `qwerq_inflight_messages` - Messages currently in-flight
+- `qwerq_in_flight_count` - Messages currently in-flight
 
 ## Goals
 
 - Single binary, single container
 - `docker run` and it works
-- Typed queue contracts (schema registry built-in, strict mode available)
+- Typed queue contracts (runtime schema enforcement, strict mode available)
 - At-least-once delivery
 - Sub-millisecond latency
 - Durable (survives restarts)
 
-## Non-Goals (v1)
+## Non-Goals (Current)
 
 - Exactly-once delivery
-- Stream/log semantics (Kafka-style replay)
-- Multi-node clustering
-- Consumer groups
+- Built-in mTLS (not implemented yet)
+- Managed cloud service
+- App-framework gateway concerns inside the broker (separate companion project)
 
 ## Documentation
 
