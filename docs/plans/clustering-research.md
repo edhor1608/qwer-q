@@ -11,8 +11,6 @@
 
 This document evaluates consensus and replication strategies for adding clustering and HA to qwer-q. The recommendation is a **phased Raft-based approach using hashicorp/raft**, with gossip (hashicorp/memberlist) for peer discovery. This matches qwer-q's "single binary, docker-first" philosophy while providing strong consistency guarantees suitable for a message queue.
 
-**Key finding:** For a queue (messages deleted after ack), Raft's strong consistency is essential. Eventually-consistent replication risks duplicate delivery or message loss. The latency overhead of Raft (1-3ms per commit on local network) is acceptable given qwer-q's current ~2-5K msgs/sec throughput.
-
 ## Problem Statement
 
 - Add clustering and failover without violating queue delivery guarantees.
@@ -43,6 +41,8 @@ This document evaluates consensus and replication strategies for adding clusteri
 - Correctness and operability matter more than peak throughput in phase 1.
 - Avoid coupling Raft internals too tightly to message storage internals.
 - Defer multi-Raft until measured write bottlenecks justify the complexity.
+
+**Key finding:** For a queue (messages deleted after ack), Raft's strong consistency is essential. Eventually-consistent replication risks duplicate delivery or message loss. The latency overhead of Raft (1-3ms per commit on local network) is acceptable given qwer-q's current ~2-5K msgs/sec throughput.
 
 ---
 
