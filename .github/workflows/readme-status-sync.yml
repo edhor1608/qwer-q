@@ -1,0 +1,149 @@
+name: README Status Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"
+
+jobs:
+  sync-readme-status:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync README status block
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          README="README.md"
+          STATUS_FILE=".project-status"
+          TODAY="$(date -u +%F)"
+          START_MARKER='<!-- status:start -->'
+          END_MARKER='<!-- status:end -->'
+
+          if [[ ! -f "$README" ]]; then
+            echo "README.md not found. Skipping."
+            exit 0
+          fi
+
+          trim() {
+            local s="${1:-}"
+            s="${s#${s%%[![:space:]]*}}"
+            s="${s%${s##*[![:space:]]}}"
+            printf '%s' "$s"
+          }
+
+          read_status_value() {
+            local key="$1"
+            local file="$2"
+            local value
+            value="$(awk -F'=' -v k="$key" '
+              $0 ~ /^[[:space:]]*#/ { next }
+              $1 ~ /^[[:space:]]*$/ { next }
+              {
+                key=$1
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+                if (key == k) {
+                  sub(/^[^=]*=/, "", $0)
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+                  print $0
+                  exit
+                }
+              }
+            ' "$file")"
+            trim "$value"
+          }
+
+          if [[ ! -f "$STATUS_FILE" ]]; then
+            cat > "$STATUS_FILE" <<STATUS
+state=active
+summary=Define current milestone.
+next=Define next concrete step.
+updated=$TODAY
+STATUS
+          fi
+
+          state="$(read_status_value "state" "$STATUS_FILE")"
+          summary="$(read_status_value "summary" "$STATUS_FILE")"
+          next="$(read_status_value "next" "$STATUS_FILE")"
+          updated="$(read_status_value "updated" "$STATUS_FILE")"
+
+          [[ -n "$state" ]] || state="active"
+          [[ -n "$summary" ]] || summary="Define current milestone."
+          [[ -n "$next" ]] || next="Define next concrete step."
+          [[ -n "$updated" ]] || updated="$TODAY"
+
+          branch="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo detached)}"
+          dirty_files="$(git status --porcelain | wc -l | tr -d ' ')"
+          if [[ "$dirty_files" == "0" ]]; then
+            tree_state="clean"
+          else
+            tree_state="dirty ($dirty_files files)"
+          fi
+
+          if last_commit_out="$(git log -1 --date=short --pretty=format:'%h (%ad) %s' 2>/dev/null)"; then
+            last_commit="$last_commit_out"
+          else
+            last_commit="n/a"
+          fi
+
+          block=$(cat <<BLOCK
+$START_MARKER
+## Status
+- State: $state
+- Summary: $summary
+- Next: $next
+- Updated: $updated
+- Branch: \`$branch\`
+- Working Tree: $tree_state
+- Last Commit: $last_commit
+$END_MARKER
+BLOCK
+)
+
+          if grep -Fq "$START_MARKER" "$README" && grep -Fq "$END_MARKER" "$README"; then
+            inblock=0
+            {
+              while IFS= read -r line || [[ -n "$line" ]]; do
+                if [[ "$inblock" -eq 0 && "$line" == *"$START_MARKER"* ]]; then
+                  printf '%s\n' "$block"
+                  inblock=1
+                  continue
+                fi
+
+                if [[ "$inblock" -eq 1 ]]; then
+                  if [[ "$line" == *"$END_MARKER"* ]]; then
+                    inblock=0
+                  fi
+                  continue
+                fi
+
+                printf '%s\n' "$line"
+              done < "$README"
+            } > "$README.tmp"
+            mv "$README.tmp" "$README"
+          else
+            printf '\n%s\n' "$block" >> "$README"
+          fi
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- README.md .project-status; then
+            echo "No status changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .project-status
+          git commit -m "chore: sync README status"
+          git push

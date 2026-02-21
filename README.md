@@ -161,3 +161,14 @@ See [docs/plans/](docs/plans/) for design documents.
 ## License
 
 Apache 2.0
+
+<!-- status:start -->
+## Status
+- State: active
+- Summary: Define current milestone.
+- Next: Define next concrete step.
+- Updated: 2026-02-21
+- Branch: `codex/docs-truth-sync-v020`
+- Working Tree: dirty (3 files)
+- Last Commit: 7b0af20 (2026-02-19) docs: address third-round PR20 markdown review nits
+<!-- status:end -->
