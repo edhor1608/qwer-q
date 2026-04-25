@@ -39,3 +39,10 @@ qwer-q
 docs-site/node_modules/
 docs-site/dist/
 docs-site/.astro/
+
+# TypeScript client
+clients/typescript/node_modules/
+clients/typescript/dist/
+
+# Local broker data
+tmp/
