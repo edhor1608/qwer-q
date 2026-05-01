@@ -48,10 +48,11 @@ func WithBatchMaxSize(n int) StorageOption {
 const DefaultBatchMaxSize = 100
 
 const (
-	msgPrefix      = "msg:"
-	queuePrefix    = "queue:"
-	streamPrefix   = "stream:"  // stream:{queue}:{sequence} → StreamMessage
-	offsetPrefix   = "offset:"  // offset:{queue}:{group} → uint64
+	msgPrefix    = "msg:"
+	idPrefix     = "id:"
+	queuePrefix  = "queue:"
+	streamPrefix = "stream:" // stream:{queue}:{sequence} → StreamMessage
+	offsetPrefix = "offset:" // offset:{queue}:{group} → uint64
 )
 
 // BadgerStorage implements Storage using BadgerDB.
@@ -125,7 +126,50 @@ func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, er
 
 // msgKey returns the storage key for a message.
 func msgKey(queue, id string) []byte {
-	return []byte(msgPrefix + queue + ":" + id)
+	key := make([]byte, 0, len(msgPrefix)+len(queue)+1+len(id))
+	key = append(key, msgPrefix...)
+	key = append(key, queue...)
+	key = append(key, ':')
+	key = append(key, id...)
+	return key
+}
+
+// idKey stores a direct lookup from message ID -> queue name.
+func idKey(id string) []byte {
+	key := make([]byte, 0, len(idPrefix)+len(id))
+	key = append(key, idPrefix...)
+	key = append(key, id...)
+	return key
+}
+
+func lookupMessageKey(txn *badger.Txn, id string) ([]byte, error) {
+	item, err := txn.Get(idKey(id))
+	if err == nil {
+		queue, err := item.ValueCopy(nil)
+		if err != nil {
+			return nil, err
+		}
+		return msgKey(string(queue), id), nil
+	}
+	if err != badger.ErrKeyNotFound {
+		return nil, err
+	}
+
+	// Legacy fallback for data written before the ID index existed.
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
+	it := txn.NewIterator(opts)
+	defer it.Close()
+
+	prefix := []byte(msgPrefix)
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		key := it.Item().KeyCopy(nil)
+		parts := strings.Split(string(key), ":")
+		if len(parts) >= 3 && parts[len(parts)-1] == id {
+			return key, nil
+		}
+	}
+	return nil, nil
 }
 
 // SaveMessage persists a message. When write batching is enabled,
@@ -139,29 +183,31 @@ func (s *BadgerStorage) SaveMessage(msg *Message) error {
 	if err != nil {
 		return err
 	}
+	messageKey := msgKey(msg.Queue, msg.ID)
+	lookupKey := idKey(msg.ID)
+	queueName := []byte(msg.Queue)
 	return s.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(msgKey(msg.Queue, msg.ID), data)
+		if err := txn.Set(messageKey, data); err != nil {
+			return err
+		}
+		return txn.Set(lookupKey, queueName)
 	})
 }
 
 // DeleteMessage removes a message by ID.
 func (s *BadgerStorage) DeleteMessage(id string) error {
 	return s.db.Update(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		prefix := []byte(msgPrefix)
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			key := it.Item().Key()
-			// Key format: msg:{queue}:{id}
-			parts := strings.Split(string(key), ":")
-			if len(parts) >= 3 && parts[len(parts)-1] == id {
-				return txn.Delete(key)
-			}
+		messageKey, err := lookupMessageKey(txn, id)
+		if err != nil {
+			return err
 		}
-		return nil
+		if len(messageKey) == 0 {
+			return nil
+		}
+		if err := txn.Delete(messageKey); err != nil {
+			return err
+		}
+		return txn.Delete(idKey(id))
 	})
 }
 

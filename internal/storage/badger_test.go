@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/jonas/qwer-q/internal/types"
 )
 
@@ -96,6 +98,56 @@ func TestBadgerStorage_DeleteMessage(t *testing.T) {
 	}
 	if len(messages) != 0 {
 		t.Fatalf("expected 0 messages after delete, got %d", len(messages))
+	}
+
+	// Index should be removed with the message.
+	err = s.db.View(func(txn *badger.Txn) error {
+		_, err := txn.Get(idKey(msg.ID))
+		return err
+	})
+	if err != badger.ErrKeyNotFound {
+		t.Fatalf("expected ID index to be deleted, got %v", err)
+	}
+}
+
+func TestBadgerStorage_DeleteMessage_LegacyFallback(t *testing.T) {
+	dir, err := os.MkdirTemp("", "badger-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	s, err := NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	msg := &Message{
+		ID:      "legacy-delete",
+		Queue:   "legacy-queue",
+		Payload: []byte("legacy-data"),
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(msgKey(msg.Queue, msg.ID), data)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.DeleteMessage(msg.ID); err != nil {
+		t.Fatalf("DeleteMessage legacy fallback failed: %v", err)
+	}
+
+	messages, err := s.LoadMessages(msg.Queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("expected legacy message to be deleted, got %d", len(messages))
 	}
 }
 

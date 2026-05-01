@@ -36,14 +36,15 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		msgID = NewULID()
 	}
 
+	now := time.Now()
 	msg := &Message{
 		ID:          msgID,
 		Queue:       req.GetQueue(),
 		Payload:     req.GetPayload(),
 		Headers:     req.GetHeaders(),
 		Attempt:     0,
-		PublishedAt: time.Now(),
-		VisibleAt:   time.Now(),
+		PublishedAt: now,
+		VisibleAt:   now,
 		OrderingKey: req.GetOrderingKey(),
 	}
 
@@ -257,13 +258,14 @@ func (b *Broker) HandleStreamPublish(req *protocol.PublishRequest) (*protocol.Pu
 		msgID = NewULID()
 	}
 
+	now := time.Now()
 	msg := &Message{
 		ID:          msgID,
 		Queue:       req.GetQueue(),
 		Payload:     req.GetPayload(),
 		Headers:     req.GetHeaders(),
 		Attempt:     0,
-		PublishedAt: time.Now(),
+		PublishedAt: now,
 	}
 
 	sq := b.GetOrCreateStreamQueue(req.GetQueue())

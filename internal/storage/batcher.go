@@ -11,9 +11,11 @@ import (
 
 // writeRequest is a single message write queued for batching.
 type writeRequest struct {
-	key  []byte
-	data []byte
-	err  chan error // caller blocks on this
+	key         []byte
+	data        []byte
+	lookupKey   []byte
+	lookupValue []byte
+	err         chan error // caller blocks on this
 }
 
 // writeBatcher collects individual writes and flushes them as a single
@@ -50,10 +52,13 @@ func (b *writeBatcher) submit(msg *Message) error {
 	if err != nil {
 		return err
 	}
+	messageKey := msgKey(msg.Queue, msg.ID)
 	req := &writeRequest{
-		key:  msgKey(msg.Queue, msg.ID),
-		data: data,
-		err:  make(chan error, 1),
+		key:         messageKey,
+		data:        data,
+		lookupKey:   idKey(msg.ID),
+		lookupValue: []byte(msg.Queue),
+		err:         make(chan error, 1),
 	}
 	select {
 	case b.inbox <- req:
@@ -129,6 +134,10 @@ func (b *writeBatcher) flush(batch []*writeRequest) {
 
 	for _, req := range batch {
 		if err := wb.Set(req.key, req.data); err != nil {
+			batchErr = err
+			break
+		}
+		if err := wb.Set(req.lookupKey, req.lookupValue); err != nil {
 			batchErr = err
 			break
 		}
