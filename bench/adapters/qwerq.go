@@ -50,6 +50,11 @@ func (a *QWERQAdapter) Publish(ctx context.Context, queue string, payload []byte
 	return err
 }
 
+func (a *QWERQAdapter) RegisterSchema(ctx context.Context, queue string, descriptor []byte, messageType string) error {
+	_, err := a.pubClient.SchemaRegister(queue, descriptor, messageType)
+	return err
+}
+
 func (a *QWERQAdapter) Consume(ctx context.Context, queue string, handler func([]byte) error) error {
 	// Close connection when context is cancelled to break out of blocking read
 	go func() {
@@ -57,8 +62,12 @@ func (a *QWERQAdapter) Consume(ctx context.Context, queue string, handler func([
 		a.consClient.Close()
 	}()
 
-	return a.consClient.Consume(queue, 100, func(msg *protocol.Message) error {
-		if err := handler(msg.Payload); err != nil {
+	return a.consClient.ConsumeWithVisibility(queue, 100, 1, func(msg *protocol.Message) error {
+		err := handler(msg.Payload)
+		if err == ErrSkipAck {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 		return a.consClient.Ack(msg.MessageId)

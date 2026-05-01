@@ -3,7 +3,9 @@ package storage
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -265,6 +267,115 @@ func BenchmarkSaveMessage_Batched(b *testing.B) {
 				Payload: payload,
 			}
 			if err := s.SaveMessage(msg); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkDeleteMessage_NoBatch(b *testing.B) {
+	benchmarkDeleteMessage(b, false)
+}
+
+func BenchmarkDeleteMessage_Batched(b *testing.B) {
+	benchmarkDeleteMessage(b, true)
+}
+
+func BenchmarkSaveDeleteMessage_NoBatch(b *testing.B) {
+	benchmarkSaveDeleteMessage(b, false)
+}
+
+func BenchmarkSaveDeleteMessage_Batched(b *testing.B) {
+	benchmarkSaveDeleteMessage(b, true)
+}
+
+func benchmarkDeleteMessage(b *testing.B, batched bool) {
+	dir, err := os.MkdirTemp("", "bench-delete-*")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	payload := make([]byte, 256)
+	queue := "bench-queue"
+	ids := make([]string, b.N)
+	for i := range ids {
+		ids[i] = strconv.Itoa(i)
+	}
+
+	preload, err := NewBadgerStorage(dir, WithSyncInterval(100*time.Millisecond))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, id := range ids {
+		if err := preload.SaveMessage(&Message{ID: id, Queue: queue, Payload: payload}); err != nil {
+			preload.Close()
+			b.Fatal(err)
+		}
+	}
+	if err := preload.Close(); err != nil {
+		b.Fatal(err)
+	}
+
+	options := []StorageOption{WithSyncInterval(100 * time.Millisecond)}
+	if batched {
+		options = append(options, WithBatchInterval(5*time.Millisecond), WithBatchMaxSize(100))
+	}
+
+	s, err := NewBadgerStorage(dir, options...)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer s.Close()
+
+	var next atomic.Uint64
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			idx := int(next.Add(1) - 1)
+			if err := s.DeleteMessage(queue, ids[idx]); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func benchmarkSaveDeleteMessage(b *testing.B, batched bool) {
+	dir, err := os.MkdirTemp("", "bench-save-delete-*")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	options := []StorageOption{WithSyncInterval(100 * time.Millisecond)}
+	if batched {
+		options = append(options, WithBatchInterval(5*time.Millisecond), WithBatchMaxSize(100))
+	}
+
+	s, err := NewBadgerStorage(dir, options...)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer s.Close()
+
+	payload := make([]byte, 256)
+	var workerSeq atomic.Uint64
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		workerID := strconv.FormatUint(workerSeq.Add(1), 10) + "-"
+		var localSeq uint64
+		for pb.Next() {
+			localSeq++
+			msg := &Message{
+				ID:      workerID + strconv.FormatUint(localSeq, 10),
+				Queue:   "bench-queue",
+				Payload: payload,
+			}
+			if err := s.SaveMessage(msg); err != nil {
+				b.Fatal(err)
+			}
+			if err := s.DeleteMessage(msg.Queue, msg.ID); err != nil {
 				b.Fatal(err)
 			}
 		}

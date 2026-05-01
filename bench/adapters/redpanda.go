@@ -87,7 +87,11 @@ func (a *RedPandaAdapter) Consume(ctx context.Context, queue string, handler fun
 				}
 				return err
 			}
-			if err := handler(msg.Value); err != nil {
+			err = handler(msg.Value)
+			if err == ErrSkipAck {
+				continue
+			}
+			if err != nil {
 				return err
 			}
 			if err := a.reader.CommitMessages(ctx, msg); err != nil {

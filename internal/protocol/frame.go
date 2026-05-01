@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"net"
 	"sync"
 	"sync/atomic"
 )
@@ -114,6 +115,18 @@ func EncodeFrame(op OpCode, payload []byte) []byte {
 	copy(frame[6:], payload)
 
 	return frame
+}
+
+// WriteFrame writes a frame directly without copying the payload into a second buffer.
+func WriteFrame(w io.Writer, op OpCode, payload []byte) error {
+	var header [6]byte
+	binary.BigEndian.PutUint32(header[:4], uint32(2+len(payload)))
+	header[4] = ProtocolVersion
+	header[5] = byte(op)
+
+	bufs := net.Buffers{header[:], payload}
+	_, err := bufs.WriteTo(w)
+	return err
 }
 
 // DecodeFrame reads a frame from the reader.

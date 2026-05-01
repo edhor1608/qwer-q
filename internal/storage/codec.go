@@ -7,13 +7,14 @@ import (
 	"time"
 )
 
-const messageEncodingV1 byte = 1
+const (
+	messageEncodingV1 byte = 1
+	messageEncodingV2 byte = 2
+)
 
 func encodeMessage(msg *Message) []byte {
-	buf := make([]byte, 0, 1+len(msg.ID)+len(msg.Queue)+len(msg.Payload)+len(msg.OrderingKey)+64)
-	buf = append(buf, messageEncodingV1)
-	buf = appendString(buf, msg.ID)
-	buf = appendString(buf, msg.Queue)
+	buf := make([]byte, 0, encodedMessageSizeV2(msg))
+	buf = append(buf, messageEncodingV2)
 	buf = appendBytes(buf, msg.Payload)
 	buf = binary.AppendUvarint(buf, uint64(len(msg.Headers)))
 	for k, v := range msg.Headers {
@@ -28,22 +29,53 @@ func encodeMessage(msg *Message) []byte {
 	return buf
 }
 
+func encodedMessageSizeV2(msg *Message) int {
+	n := 1 + uvarintSize(uint64(len(msg.Payload))) + len(msg.Payload)
+	n += uvarintSize(uint64(len(msg.Headers)))
+	for k, v := range msg.Headers {
+		n += uvarintSize(uint64(len(k))) + len(k)
+		n += uvarintSize(uint64(len(v))) + len(v)
+	}
+	n += uvarintSize(uint64(msg.Attempt))
+	n += varintSize(msg.PublishedAt.UnixNano())
+	n += varintSize(msg.VisibleAt.UnixNano())
+	n += uvarintSize(uint64(len(msg.OrderingKey))) + len(msg.OrderingKey)
+	n += uvarintSize(msg.Sequence)
+	return n
+}
+
 func decodeMessage(data []byte, msg *Message) error {
 	if len(data) == 0 {
 		return fmt.Errorf("decode message: empty payload")
 	}
-	if data[0] != messageEncodingV1 {
+
+	switch data[0] {
+	case messageEncodingV1:
+		return decodeMessageV1(data[1:], msg)
+	case messageEncodingV2:
+		return decodeMessageV2(data[1:], msg)
+	default:
 		return json.Unmarshal(data, msg)
 	}
+}
 
+func decodeMessageV1(buf []byte, msg *Message) error {
 	var err error
-	buf := data[1:]
 	if msg.ID, buf, err = readString(buf); err != nil {
 		return err
 	}
 	if msg.Queue, buf, err = readString(buf); err != nil {
 		return err
 	}
+	return decodeMessageFields(buf, msg)
+}
+
+func decodeMessageV2(buf []byte, msg *Message) error {
+	return decodeMessageFields(buf, msg)
+}
+
+func decodeMessageFields(buf []byte, msg *Message) error {
+	var err error
 	if msg.Payload, buf, err = readBytes(buf); err != nil {
 		return err
 	}
@@ -106,6 +138,16 @@ func appendBytes(dst, data []byte) []byte {
 	dst = binary.AppendUvarint(dst, uint64(len(data)))
 	dst = append(dst, data...)
 	return dst
+}
+
+func uvarintSize(v uint64) int {
+	var buf [binary.MaxVarintLen64]byte
+	return binary.PutUvarint(buf[:], v)
+}
+
+func varintSize(v int64) int {
+	var buf [binary.MaxVarintLen64]byte
+	return binary.PutVarint(buf[:], v)
 }
 
 func readUvarint(data []byte) (uint64, []byte, error) {

@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"testing"
 )
 
@@ -38,6 +39,17 @@ func TestEncodeFrame(t *testing.T) {
 	}
 }
 
+func TestWriteFrame(t *testing.T) {
+	payload := []byte("hello")
+	var buf bytes.Buffer
+	if err := WriteFrame(&buf, OpPublish, payload); err != nil {
+		t.Fatalf("WriteFrame error: %v", err)
+	}
+	if !bytes.Equal(buf.Bytes(), EncodeFrame(OpPublish, payload)) {
+		t.Fatal("WriteFrame output mismatch")
+	}
+}
+
 func TestDecodeFrame(t *testing.T) {
 	original := []byte("test payload")
 	encoded := EncodeFrame(OpMessage, original)
@@ -68,5 +80,25 @@ func TestDecodeFrameMaxSize(t *testing.T) {
 	_, err := DecodeFrame(reader)
 	if err != ErrFrameTooLarge {
 		t.Errorf("error = %v, want ErrFrameTooLarge", err)
+	}
+}
+
+func BenchmarkEncodeFrame1KB(b *testing.B) {
+	payload := make([]byte, 1024)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(payload)))
+	for i := 0; i < b.N; i++ {
+		_ = EncodeFrame(OpMessage, payload)
+	}
+}
+
+func BenchmarkWriteFrame1KB(b *testing.B) {
+	payload := make([]byte, 1024)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(payload)))
+	for i := 0; i < b.N; i++ {
+		if err := WriteFrame(io.Discard, OpMessage, payload); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

@@ -65,7 +65,11 @@ func (a *RedisAdapter) Consume(ctx context.Context, queue string, handler func([
 		for _, stream := range streams {
 			for _, msg := range stream.Messages {
 				data := msg.Values["data"].(string)
-				if err := handler([]byte(data)); err != nil {
+				err := handler([]byte(data))
+				if err == ErrSkipAck {
+					continue
+				}
+				if err != nil {
 					return err
 				}
 				a.client.XAck(ctx, queue, a.group, msg.ID)

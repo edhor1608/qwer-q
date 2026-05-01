@@ -43,6 +43,41 @@ type LatencyResult struct {
 	Error error
 }
 
+// QueueCoreResult holds results from the first product-shaped queue benchmark.
+type QueueCoreResult struct {
+	Name                 string
+	ThroughputMsgsPerSec float64
+	LatencyP95           time.Duration
+	OrderingRate         float64
+	RedeliveryRate       float64
+	SupportsRedelivery   bool
+	Behavior             string
+	Error                error
+}
+
+// TypedQueueResult holds results from the typed queue benchmark layer.
+type TypedQueueResult struct {
+	Name              string
+	Supported         bool
+	ValidMsgsPerSec   float64
+	LatencyP95        time.Duration
+	InvalidRejectRate float64
+	InvalidRejected   int
+	InvalidAttempts   int
+	Notes             string
+	Error             error
+}
+
+// OperatorCoreResult holds results from the operator-efficiency benchmark layer.
+type OperatorCoreResult struct {
+	Name         string
+	DrainRate    float64
+	LossRate     float64
+	RecoveryTime time.Duration
+	Notes        string
+	Error        error
+}
+
 // Histogram wraps hdrhistogram for latency recording.
 type Histogram struct {
 	hist *hdrhistogram.Histogram
@@ -102,6 +137,92 @@ func PrintLatencyTable(cfg Config, results []LatencyResult) {
 		}
 	}
 	fmt.Println("+-------------+---------+---------+---------+---------+")
+}
+
+// PrintQueueCoreTable prints results for the first product-shaped queue benchmark.
+func PrintQueueCoreTable(cfg Config, results []QueueCoreResult) {
+	fmt.Printf("\nScenario: Queue Core (%s, %dB messages)\n", cfg.Duration, cfg.MessageSize)
+	fmt.Println("+-------------+------------+---------+----------+------------+------------------------------+")
+	fmt.Println("| Queue       | Msgs/sec   | p95     | Order %  | Redeliver  | Notes                        |")
+	fmt.Println("+-------------+------------+---------+----------+------------+------------------------------+")
+	for _, r := range results {
+		if r.Error != nil {
+			fmt.Printf("| %-11s | ERROR: %-62s |\n", r.Name, r.Error.Error())
+			continue
+		}
+		redelivery := "no"
+		if r.SupportsRedelivery {
+			redelivery = fmt.Sprintf("%.1f%%", r.RedeliveryRate)
+		}
+		notes := r.Behavior
+		if len(notes) > 28 {
+			notes = notes[:28]
+		}
+		fmt.Printf("| %-11s | %10s | %7s | %7.1f%% | %10s | %-28s |\n",
+			r.Name,
+			formatNumber(int64(r.ThroughputMsgsPerSec)),
+			formatDuration(r.LatencyP95),
+			r.OrderingRate,
+			redelivery,
+			notes,
+		)
+	}
+	fmt.Println("+-------------+------------+---------+----------+------------+------------------------------+")
+}
+
+// PrintTypedQueueTable prints typed-queue benchmark results.
+func PrintTypedQueueTable(cfg Config, results []TypedQueueResult) {
+	fmt.Printf("\nScenario: Typed Queue (%s, %dB messages)\n", cfg.Duration, cfg.MessageSize)
+	fmt.Println("+-------------+------------+---------+------------+------------------------------+")
+	fmt.Println("| Queue       | Valid/s    | p95     | Reject %   | Notes                        |")
+	fmt.Println("+-------------+------------+---------+------------+------------------------------+")
+	for _, r := range results {
+		if r.Error != nil {
+			fmt.Printf("| %-11s | ERROR: %-62s |\n", r.Name, r.Error.Error())
+			continue
+		}
+		notes := r.Notes
+		if len(notes) > 28 {
+			notes = notes[:28]
+		}
+		valid := "n/a"
+		latency := "n/a"
+		reject := "n/a"
+		if r.Supported {
+			valid = formatNumber(int64(r.ValidMsgsPerSec))
+			latency = formatDuration(r.LatencyP95)
+			reject = fmt.Sprintf("%.1f%%", r.InvalidRejectRate)
+		}
+		fmt.Printf("| %-11s | %10s | %7s | %10s | %-28s |\n",
+			r.Name, valid, latency, reject, notes)
+	}
+	fmt.Println("+-------------+------------+---------+------------+------------------------------+")
+}
+
+// PrintOperatorCoreTable prints operator-efficiency benchmark results.
+func PrintOperatorCoreTable(results []OperatorCoreResult) {
+	fmt.Println("\nScenario: Operator Core")
+	fmt.Println("+-------------+------------+----------+-----------+------------------------------+")
+	fmt.Println("| Queue       | Drain/sec  | Loss %   | Recovery  | Notes                        |")
+	fmt.Println("+-------------+------------+----------+-----------+------------------------------+")
+	for _, r := range results {
+		if r.Error != nil {
+			fmt.Printf("| %-11s | ERROR: %-62s |\n", r.Name, r.Error.Error())
+			continue
+		}
+		notes := r.Notes
+		if len(notes) > 28 {
+			notes = notes[:28]
+		}
+		fmt.Printf("| %-11s | %10s | %7.2f%% | %9s | %-28s |\n",
+			r.Name,
+			formatNumber(int64(r.DrainRate)),
+			r.LossRate,
+			formatDuration(r.RecoveryTime),
+			notes,
+		)
+	}
+	fmt.Println("+-------------+------------+----------+-----------+------------------------------+")
 }
 
 func formatNumber(n int64) string {

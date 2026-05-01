@@ -120,13 +120,8 @@ func (e *BrokerError) Error() string {
 
 // Publish sends a message to a queue.
 func (c *Client) Publish(queue string, payload []byte) (*protocol.PublishResponse, error) {
-	req := &protocol.PublishRequest{
-		Queue:   queue,
-		Payload: payload,
-	}
-	data, _ := proto.Marshal(req)
-	frame := protocol.EncodeFrame(protocol.OpPublish, data)
-	if _, err := c.conn.Write(frame); err != nil {
+	data := protocol.EncodeSimplePublishRequestPayload(queue, payload)
+	if err := protocol.WriteFrame(c.conn, protocol.OpPublish, data); err != nil {
 		return nil, err
 	}
 
@@ -140,6 +135,10 @@ func (c *Client) Publish(queue string, payload []byte) (*protocol.PublishRespons
 		return nil, &BrokerError{Code: errResp.Code, Message: errResp.Message}
 	}
 
+	if messageID, ok := protocol.DecodePublishResponsePayload(resp.Payload); ok {
+		return &protocol.PublishResponse{MessageId: messageID}, nil
+	}
+
 	var result protocol.PublishResponse
 	if err := proto.Unmarshal(resp.Payload, &result); err != nil {
 		return nil, err
@@ -147,16 +146,16 @@ func (c *Client) Publish(queue string, payload []byte) (*protocol.PublishRespons
 	return &result, nil
 }
 
-// Consume starts consuming from a queue. Messages are delivered to the handler.
-// This is a blocking call that reads messages until the context is cancelled or an error occurs.
+// Consume starts consuming from a queue with the default visibility timeout.
 func (c *Client) Consume(queue string, prefetch uint32, handler func(*protocol.Message) error) error {
-	req := &protocol.ConsumeRequest{
-		Queue:    queue,
-		Prefetch: prefetch,
-	}
-	data, _ := proto.Marshal(req)
-	frame := protocol.EncodeFrame(protocol.OpConsume, data)
-	if _, err := c.conn.Write(frame); err != nil {
+	return c.ConsumeWithVisibility(queue, prefetch, 0, handler)
+}
+
+// ConsumeWithVisibility starts consuming from a queue with an explicit visibility timeout in seconds.
+// A timeout of 0 uses the broker default.
+func (c *Client) ConsumeWithVisibility(queue string, prefetch, visibilityTimeout uint32, handler func(*protocol.Message) error) error {
+	data := protocol.EncodeSimpleConsumeRequestPayload(queue, prefetch, visibilityTimeout)
+	if err := protocol.WriteFrame(c.conn, protocol.OpConsume, data); err != nil {
 		return err
 	}
 
@@ -186,9 +185,5 @@ func (c *Client) Consume(queue string, prefetch uint32, handler func(*protocol.M
 
 // Ack acknowledges a message.
 func (c *Client) Ack(messageID string) error {
-	req := &protocol.AckRequest{MessageId: messageID}
-	data, _ := proto.Marshal(req)
-	frame := protocol.EncodeFrame(protocol.OpAck, data)
-	_, err := c.conn.Write(frame)
-	return err
+	return protocol.WriteFrame(c.conn, protocol.OpAck, protocol.EncodeAckRequestPayload(messageID))
 }

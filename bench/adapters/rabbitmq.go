@@ -74,7 +74,12 @@ func (a *RabbitMQAdapter) Consume(ctx context.Context, queue string, handler fun
 			if !ok {
 				return nil
 			}
-			if err := handler(msg.Body); err != nil {
+			err := handler(msg.Body)
+			if err == ErrSkipAck {
+				msg.Nack(false, true)
+				continue
+			}
+			if err != nil {
 				msg.Nack(false, true) // Requeue on error
 				return err
 			}

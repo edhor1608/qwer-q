@@ -640,9 +640,9 @@ Current queue consumer channel buffer remains `1`. This entry documents a consid
 
 ---
 
-## DEC-024: Configurable Sync Interval (Historical Proposal)
+## DEC-024: Configurable Sync Interval
 **Date:** 2026-02-01
-**Status:** Partially adopted
+**Status:** Decided
 
 ### Context
 BadgerDB sync (fsync) was happening every write, limiting throughput. Options:
@@ -665,8 +665,8 @@ Historical proposal: configurable sync interval via `--sync-interval` CLI flag. 
 - Benchmarking: 1s (prioritize throughput)
 - Production critical: 0 (sync every write)
 
-### Notes (2026-02-18)
-Current implementation has compile-time sync interval default (`100ms`) and runtime write batching (`--batch-interval`), but no `--sync-interval` serve flag.
+### Notes
+Current implementation now exposes `--sync-interval` on `serve`, with a default of `100ms` and `0` meaning sync every write.
 
 ---
 
@@ -749,3 +749,198 @@ Use code-as-source-of-truth for operational defaults and claim docs must reflect
 - Decision log entries that are exploratory or superseded must be explicitly labeled
 - Docs and README must classify features as stable vs preview
 - Benchmark and performance claims must remain reproducible and conservative
+
+---
+
+## DEC-028: Parallel Optimization Lab
+**Date:** 2026-04-13
+**Status:** Decided
+
+### Context
+QWER-Q has clear single-node queue-path performance debt, but the possible fixes span very different risk levels:
+- conservative hot-path cleanup inside the existing Go + Badger architecture
+- more invasive storage-path changes focused on queue-first durability and throughput
+- possible future Rust exploration if Go experiments plateau
+
+A single branch would mix these ideas and make it hard to measure or roll back individual bets.
+
+### Decision
+Run optimization work as a parallel lab with isolated git worktrees and branch-specific docs:
+- coordinator branch: `perf/parallel-lab`
+- hot-path branch/worktree: `perf/hotpath-lab` in `../qwer-q-hotpath`
+- storage-path branch/worktree: `perf/storage-lab` in `../qwer-q-storage`
+
+Use shared baseline benchmarks before each experiment branch diverges, then compare measured wins and keep only changes that improve the queue-first use case.
+
+### Rationale
+- Keeps aggressive experiments isolated and reviewable
+- Allows apples-to-apples comparison against a common baseline
+- Prevents one speculative branch from contaminating another
+- Matches the project goal of doubling down on the queue-first path
+
+### Consequences
+- Every experiment branch must carry its own plan/results doc
+- Benchmark commands and environment must stay consistent across branches
+- Findings that do not outperform baseline should be documented and abandoned
+
+---
+
+## DEC-029: Per-Message Traffic Logs Default To Debug
+**Date:** 2026-04-13
+**Status:** Decided
+
+### Context
+The live queue benchmark exercises a real producer and consumer over TCP. The broker was logging every publish, delivery, and nack at `INFO`, which adds avoidable write-path overhead and produces the wrong default operator experience for a high-throughput queue.
+
+### Decision
+Demote per-message traffic logs from `INFO` to `DEBUG`:
+- `message published`
+- `message delivered`
+- `message nacked`
+
+Connection lifecycle logs remain at `INFO`.
+
+### Rationale
+- High-volume queue traffic should not spam default logs
+- Per-message `INFO` logging distorts real throughput measurements
+- Operators still have access to detailed traces by raising log verbosity deliberately
+
+### Consequences
+- Default broker logs become operationally quieter and cheaper
+- Benchmarks reflect broker work more than log I/O
+- Debug logging remains available for traffic-level investigations
+
+---
+
+## DEC-030: Keep Direct Frame Writes, Reject Early Decode Buffer Release
+**Date:** 2026-04-13
+**Status:** Decided
+
+### Context
+The wire path was doing an extra payload copy after protobuf marshal via `EncodeFrame`, and `DecodeFrame` had an apparent but unused pooling opportunity.
+
+### Decision
+Keep direct framed writes via `protocol.WriteFrame` in the hot client/server paths, but reject any early decode-buffer release until ownership semantics are redesigned.
+
+### Rationale
+- Direct frame writes remove an unnecessary payload copy with a simple local change
+- The protocol microbench showed materially lower framing cost and allocated bytes
+- Early decode-buffer release looked attractive but is unsafe because publish payloads and decoded client messages can outlive the frame buffer
+
+### Consequences
+- Hot request/delivery writes avoid building a second full frame buffer
+- `DecodeFrame` pooling remains a future opportunity, not a safe current optimization
+- Any future decode-buffer reuse work must prove field ownership explicitly before release
+
+---
+
+## DEC-031: Use Exact Wire-Compatible Fast Paths For The Simple Publish/Ack Path
+**Date:** 2026-04-13
+**Status:** Decided
+
+### Context
+The Go benchmark client exercises a narrow protobuf subset repeatedly:
+- `Publish(queue, payload)`
+- `Ack(messageID)`
+- `Consume(queue, prefetch)`
+- `PublishResponse{message_id}` on every publish ack
+
+The generic protobuf encoder/decoder works, but it adds avoidable overhead on the hottest client/server path.
+
+### Decision
+Keep exact, wire-compatible encoders/decoders for the simple publish/ack path:
+- server publish ack payload encoded directly
+- client publish ack payload decoded via a fast path with fallback to generic protobuf decode
+- client publish, consume, and ack requests encoded directly for the field sets that client actually sends
+
+### Rationale
+- The message shapes are small and stable
+- The optimization is localized and easy to audit against the protobuf schema
+- Protocol microbenches showed materially lower encode/decode cost for publish ack and ack request handling
+- This preserves wire compatibility without changing the public client API
+
+### Consequences
+- The hot producer path depends on small exact encoders/decoders that must stay aligned with `proto/qwerq.proto`
+- If the simple client path grows new fields, these fast paths must be updated or the code must fall back to generic protobuf marshaling
+- The generic protobuf path remains available for non-hot or shape-changing cases
+
+---
+
+## DEC-034: The Go Client Must Support A Protobuf-Native Typed Workflow
+**Date:** 2026-04-14
+**Status:** Decided
+
+### Context
+QWER-Q's typed contract story is one of its main differentiators, but the Go client still forced users into a low-level byte workflow even when they were already using generated protobuf message types.
+
+### Decision
+Add a minimal protobuf-native typed layer to the Go client:
+- publish generated protobuf messages directly
+- consume and decode protobuf payloads directly
+- register queue schemas from generated message descriptors
+
+### Rationale
+- Aligns the Go client with the product's typed queue identity
+- Reduces byte-level glue code in real applications
+- Strengthens the typed USP without introducing a large framework surface
+
+### Consequences
+- The Go client now owns a small descriptor-set builder based on protobuf reflection
+- Typed client tests must cover the real strict-mode broker path
+- Future client ergonomics work can build on this layer instead of reinventing typed publish/consume flows
+
+---
+
+## DEC-032: QWER-Q Is A Queue-First Typed Durable Broker
+**Date:** 2026-04-13
+**Status:** Decided
+
+### Context
+Optimization work had already improved the hot path, but the larger strategic risk was product drift: comparing QWER-Q to systems built for different categories and then optimizing toward their strengths instead of our own intended product.
+
+### Decision
+Anchor QWER-Q explicitly as:
+- a queue-first broker
+- typed at the broker boundary
+- self-hosted and simple to operate
+- richer than a minimal transport, lighter than Kafka-class platforms
+
+Treat stream mode and clustering as preview capabilities, not the primary product identity.
+
+### Rationale
+- Prevents roadmap and benchmark drift
+- Clarifies what QWER-Q should and should not try to be best at
+- Keeps queue semantics, typed contracts, and product ergonomics at the center
+
+### Consequences
+- Future work should be judged against the queue-first typed broker identity
+- Features that pull the product toward stream-platform or workflow-engine identity must be treated cautiously
+- Product docs and benchmark framing should reflect this category explicitly
+
+---
+
+## DEC-033: Use Product-Shaped Benchmarks As The Main Scoreboard
+**Date:** 2026-04-13
+**Status:** Decided
+
+### Context
+Existing benchmarks measured useful pieces of the system, but they did not yet fully express the category QWER-Q wants to win.
+
+### Decision
+Adopt a layered benchmark charter:
+- queue-core benchmark
+- typed queue benchmark
+- operator efficiency benchmark
+- product scorecard
+
+Implement the first product-shaped suite as a `queue-core` benchmark inside `bench/`, then use that scoreboard to drive both USP hardening and queue-engine work.
+
+### Rationale
+- Measures QWER-Q against its actual product promise
+- Separates must-win comparisons from reference-only comparisons
+- Gives future optimization work a strategic scoreboard instead of ad-hoc local maxima
+
+### Consequences
+- Raw throughput alone is no longer the primary product benchmark
+- Benchmarks must state guarantees and competitor class clearly
+- Optimization wins that do not improve product-shaped benchmarks should not drive roadmap direction

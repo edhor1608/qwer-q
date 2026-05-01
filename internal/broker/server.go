@@ -228,7 +228,7 @@ func (s *Server) handleConn(conn net.Conn) {
 func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.Conn) []byte {
 	switch frame.OpCode {
 	case protocol.OpPublish:
-		return s.handlePublish(frame.Payload, state.clientAddr)
+		return s.handlePublish(frame.Payload, state.clientAddr, conn, &state.writeMu)
 	case protocol.OpConsume:
 		return s.handleConsume(frame.Payload, state, conn)
 	case protocol.OpAck:
@@ -260,7 +260,7 @@ func (s *Server) handleFrame(frame *protocol.Frame, state *connState, conn net.C
 	}
 }
 
-func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
+func (s *Server) handlePublish(payload []byte, clientAddr string, conn net.Conn, writeMu *sync.Mutex) []byte {
 	start := time.Now()
 	var req protocol.PublishRequest
 	if err := proto.Unmarshal(payload, &req); err != nil {
@@ -304,7 +304,6 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 			return EncodeError(3, err.Error())
 		}
 
-		resp := &protocol.PublishResponse{MessageId: replicatedID}
 		LogPublish(req.GetQueue(), replicatedID, clientAddr)
 		q := s.broker.GetQueue(req.GetQueue())
 		RecordPublish(req.GetQueue(), time.Since(start).Seconds())
@@ -312,8 +311,11 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 			UpdateQueueDepth(req.GetQueue(), q.Len())
 			UpdateInFlightCount(req.GetQueue(), q.InFlightLen())
 		}
-		data, _ := proto.Marshal(resp)
-		return protocol.EncodeFrame(protocol.OpPublishAck, data)
+		data := protocol.EncodePublishResponsePayload(replicatedID)
+		writeMu.Lock()
+		_ = protocol.WriteFrame(conn, protocol.OpPublishAck, data)
+		writeMu.Unlock()
+		return nil
 	}
 
 	// Check if this is a stream queue
@@ -325,8 +327,11 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 		}
 		LogPublish(req.GetQueue(), resp.MessageId, clientAddr)
 		RecordPublish(req.GetQueue(), time.Since(start).Seconds())
-		data, _ := proto.Marshal(resp)
-		return protocol.EncodeFrame(protocol.OpPublishAck, data)
+		data := protocol.EncodePublishResponsePayload(resp.MessageId)
+		writeMu.Lock()
+		_ = protocol.WriteFrame(conn, protocol.OpPublishAck, data)
+		writeMu.Unlock()
+		return nil
 	}
 
 	// Single-node mode: apply directly.
@@ -344,8 +349,11 @@ func (s *Server) handlePublish(payload []byte, clientAddr string) []byte {
 		UpdateInFlightCount(req.GetQueue(), q.InFlightLen())
 	}
 
-	data, _ := proto.Marshal(resp)
-	return protocol.EncodeFrame(protocol.OpPublishAck, data)
+	data := protocol.EncodePublishResponsePayload(resp.MessageId)
+	writeMu.Lock()
+	_ = protocol.WriteFrame(conn, protocol.OpPublishAck, data)
+	writeMu.Unlock()
+	return nil
 }
 
 func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) []byte {
@@ -381,10 +389,9 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 
 				protoMsg := MessageToProto(msg)
 				data, _ := proto.Marshal(protoMsg)
-				frame := protocol.EncodeFrame(protocol.OpMessage, data)
 
 				state.writeMu.Lock()
-				conn.Write(frame)
+				protocol.WriteFrame(conn, protocol.OpMessage, data)
 				state.writeMu.Unlock()
 			case <-state.stopCh:
 				return
@@ -657,10 +664,9 @@ func (s *Server) handleSeek(payload []byte, state *connState, conn net.Conn) []b
 
 				smsg := StreamMessageToProto(msg)
 				data, _ := proto.Marshal(smsg)
-				frame := protocol.EncodeFrame(protocol.OpStreamMessage, data)
 
 				state.writeMu.Lock()
-				conn.Write(frame)
+				protocol.WriteFrame(conn, protocol.OpStreamMessage, data)
 				state.writeMu.Unlock()
 			case <-state.stopCh:
 				return
