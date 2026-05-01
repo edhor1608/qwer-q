@@ -1,5 +1,7 @@
 # Benchmark Process
 
+Policy reference: `docs/benchmarks/CLAIMS-POLICY.md` defines which results are publishable externally.
+
 ## Optimization Cycle
 
 This is our primary workflow for continuous improvement.

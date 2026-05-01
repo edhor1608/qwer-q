@@ -2,6 +2,8 @@
 
 A comprehensive benchmark suite for testing QWER-Q against other message queues under realistic conditions.
 
+Release-facing benchmark claims are governed by `docs/benchmarks/CLAIMS-POLICY.md`.
+
 ## Philosophy
 
 **Find weaknesses, not just good numbers.**
@@ -97,11 +99,11 @@ go run bench/cmd/stress/main.go --duration=60s --tests=all
 
 ## What We Learned
 
-### 1. Sync Writes Are Expensive
+### 1. Durability Settings Dominate Throughput
 
-Our initial benchmarks showed QWER-Q at 188/s while NATS hit 800K/s. The difference? NATS doesn't persist by default. Kafka uses replication instead of fsync. Redis syncs once per second.
+Persistent and non-persistent systems should not be compared as if they provide identical guarantees.
 
-**Lesson:** Nobody fsyncs every write in production. It's a tradeoff.
+**Lesson:** publish benchmark numbers only with durability mode and environment documented.
 
 ### 2. Memory Is Tricky in Containers
 
@@ -117,9 +119,13 @@ Running benchmarks without clearing previous test data caused false "memory pres
 
 ### 4. Fair Comparison Is Hard
 
-Comparing QWER-Q (persistent) to NATS (ephemeral) is apples to oranges. Compare:
-- QWER-Q vs Kafka (both persistent)
-- NATS vs Redis (both ephemeral/fast)
+Cross-system comparison is only valid when configuration and guarantees are aligned.
+
+Reference set for release-facing comparisons:
+- QWER-Q
+- NATS (JetStream configured and documented)
+- RabbitMQ
+- Kafka
 
 ### 5. Document Before Fixing
 
@@ -140,6 +146,8 @@ See `docs/benchmarks/WEAKNESSES.md` for:
 
 See `docs/benchmarks/` for dated benchmark results:
 - `2026-01-31-benchmark-results.md` - Initial comparison
+
+Important: historical benchmark files may include exploratory runs, adapter bugs, or stale assumptions. Use `docs/benchmarks/CLAIMS-POLICY.md` before citing any number externally.
 
 ## Adding New Tests
 

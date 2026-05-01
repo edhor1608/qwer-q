@@ -2,6 +2,8 @@
 
 This document tracks weaknesses found during benchmarking. Issues are documented first, then fixed in priority order.
 
+This is an engineering working log, not a release-facing claims document.
+
 ## Process
 1. Run benchmark suite
 2. Document findings here with reproduction steps

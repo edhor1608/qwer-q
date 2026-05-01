@@ -1,5 +1,8 @@
 # QWER-Q Performance Optimizations
 
+> Historical optimization notes.  
+> For release-facing claims, use `docs/benchmarks/CLAIMS-POLICY.md` and a dated policy-compliant benchmark report.
+
 This document captures the performance work done to make QWER-Q competitive with other message queues.
 
 ## The Problem
