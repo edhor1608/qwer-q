@@ -45,4 +45,4 @@ clients/typescript/node_modules/
 clients/typescript/dist/
 
 # Local broker data
-tmp/
+/tmp/
