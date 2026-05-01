@@ -79,14 +79,14 @@ type queueSummary struct {
 }
 
 type queueDetail struct {
-	Name          string             `json:"name"`
-	Depth         int                `json:"depth"`
-	InFlight      int                `json:"in_flight"`
-	ConsumerCount int                `json:"consumer_count"`
-	MaxSize       int                `json:"max_size"`
-	MaxRetries    uint32             `json:"max_retries"`
+	Name          string               `json:"name"`
+	Depth         int                  `json:"depth"`
+	InFlight      int                  `json:"in_flight"`
+	ConsumerCount int                  `json:"consumer_count"`
+	MaxSize       int                  `json:"max_size"`
+	MaxRetries    uint32               `json:"max_retries"`
 	FailurePolicy broker.FailurePolicy `json:"failure_policy"`
-	HasSchema     bool               `json:"has_schema"`
+	HasSchema     bool                 `json:"has_schema"`
 }
 
 func (h *Handler) handleQueues(w http.ResponseWriter, r *http.Request) {

@@ -175,7 +175,7 @@ func (q *Queue) deliverOrdered(msg *Message, now time.Time) bool {
 	}
 
 	select {
-	case c.Ch <- msg:
+	case c.Ch <- cloneMessage(msg):
 		msg.VisibleAt = now.Add(c.VisibilityTimeout)
 		return true
 	default:
@@ -191,7 +191,7 @@ func (q *Queue) deliverRoundRobin(msg *Message, now time.Time) bool {
 		c := q.consumers[idx]
 
 		select {
-		case c.Ch <- msg:
+		case c.Ch <- cloneMessage(msg):
 			msg.VisibleAt = now.Add(c.VisibilityTimeout)
 			q.nextIdx = (idx + 1) % len(q.consumers)
 			return true
@@ -200,6 +200,18 @@ func (q *Queue) deliverRoundRobin(msg *Message, now time.Time) bool {
 		}
 	}
 	return false
+}
+
+func cloneMessage(msg *Message) *Message {
+	cloned := *msg
+	cloned.Attempt = msg.Attempt + 1
+	if msg.Headers != nil {
+		cloned.Headers = make(map[string]string, len(msg.Headers))
+		for k, v := range msg.Headers {
+			cloned.Headers[k] = v
+		}
+	}
+	return &cloned
 }
 
 // Dequeue returns a consumer channel for receiving messages.

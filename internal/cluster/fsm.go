@@ -165,7 +165,7 @@ func (f *FSM) applyAck(data json.RawMessage) *FSMResponse {
 	q.Ack(cmd.MessageID)
 
 	if f.broker.Storage() != nil {
-		f.broker.Storage().DeleteMessage(cmd.MessageID)
+		f.broker.Storage().DeleteMessage(cmd.Queue, cmd.MessageID)
 	}
 
 	return &FSMResponse{}

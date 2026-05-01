@@ -9,10 +9,10 @@ import (
 
 // StreamConsumer tracks a consumer's position in a stream.
 type StreamConsumer struct {
-	Group   string
-	Ch      chan *Message
-	offset  uint64 // next sequence to deliver
-	stopCh  chan struct{}
+	Group  string
+	Ch     chan *Message
+	offset uint64 // next sequence to deliver
+	stopCh chan struct{}
 }
 
 // StreamQueue implements log semantics: messages are retained, consumers track offsets.

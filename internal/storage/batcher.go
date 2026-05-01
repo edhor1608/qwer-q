@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/json"
 	"log"
 	"sync"
 	"time"
@@ -46,13 +45,9 @@ func newWriteBatcher(db *badger.DB, interval time.Duration, maxSize int) *writeB
 
 // submit queues a message write and blocks until it's flushed to BadgerDB.
 func (b *writeBatcher) submit(msg *Message) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
 	req := &writeRequest{
 		key:  msgKey(msg.Queue, msg.ID),
-		data: data,
+		data: encodeMessage(msg),
 		err:  make(chan error, 1),
 	}
 	select {

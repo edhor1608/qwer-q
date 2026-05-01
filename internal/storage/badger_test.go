@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/jonas/qwer-q/internal/types"
 )
 
@@ -86,7 +88,7 @@ func TestBadgerStorage_DeleteMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.DeleteMessage(msg.ID); err != nil {
+	if err := s.DeleteMessage(msg.Queue, msg.ID); err != nil {
 		t.Fatalf("DeleteMessage failed: %v", err)
 	}
 
@@ -96,6 +98,48 @@ func TestBadgerStorage_DeleteMessage(t *testing.T) {
 	}
 	if len(messages) != 0 {
 		t.Fatalf("expected 0 messages after delete, got %d", len(messages))
+	}
+}
+
+func TestBadgerStorage_LoadMessages_LegacyJSON(t *testing.T) {
+	dir, err := os.MkdirTemp("", "badger-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	s, err := NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	msg := &Message{
+		ID:          "legacy-json",
+		Queue:       "legacy-queue",
+		Payload:     []byte("legacy"),
+		PublishedAt: time.Now().Truncate(time.Millisecond),
+		VisibleAt:   time.Now().Truncate(time.Millisecond),
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(msgKey(msg.Queue, msg.ID), data)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	messages, err := s.LoadMessages(msg.Queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(messages))
+	}
+	if messages[0].ID != msg.ID {
+		t.Fatalf("legacy message ID mismatch: got %s want %s", messages[0].ID, msg.ID)
 	}
 }
 
