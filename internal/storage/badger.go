@@ -48,10 +48,10 @@ func WithBatchMaxSize(n int) StorageOption {
 const DefaultBatchMaxSize = 100
 
 const (
-	msgPrefix      = "msg:"
-	queuePrefix    = "queue:"
-	streamPrefix   = "stream:"  // stream:{queue}:{sequence} → StreamMessage
-	offsetPrefix   = "offset:"  // offset:{queue}:{group} → uint64
+	msgPrefix    = "msg:"
+	queuePrefix  = "queue:"
+	streamPrefix = "stream:" // stream:{queue}:{sequence} → StreamMessage
+	offsetPrefix = "offset:" // offset:{queue}:{group} → uint64
 )
 
 // BadgerStorage implements Storage using BadgerDB.
@@ -61,6 +61,7 @@ type BadgerStorage struct {
 	syncInterval time.Duration
 	batcher      *writeBatcher // nil when batching disabled
 	closeOnce    sync.Once
+	syncWg       sync.WaitGroup
 }
 
 // NewBadgerStorage opens or creates a BadgerDB at the given path.
@@ -108,6 +109,7 @@ func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, er
 
 	// Start background sync if not syncing every write
 	if !syncEveryWrite {
+		s.syncWg.Add(1)
 		go s.syncLoop()
 	}
 
@@ -125,7 +127,12 @@ func NewBadgerStorage(path string, options ...StorageOption) (*BadgerStorage, er
 
 // msgKey returns the storage key for a message.
 func msgKey(queue, id string) []byte {
-	return []byte(msgPrefix + queue + ":" + id)
+	key := make([]byte, 0, len(msgPrefix)+len(queue)+1+len(id))
+	key = append(key, msgPrefix...)
+	key = append(key, queue...)
+	key = append(key, ':')
+	key = append(key, id...)
+	return key
 }
 
 // SaveMessage persists a message. When write batching is enabled,
@@ -135,33 +142,16 @@ func (s *BadgerStorage) SaveMessage(msg *Message) error {
 	if s.batcher != nil {
 		return s.batcher.submit(msg)
 	}
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
+	data := encodeMessage(msg)
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(msgKey(msg.Queue, msg.ID), data)
 	})
 }
 
-// DeleteMessage removes a message by ID.
-func (s *BadgerStorage) DeleteMessage(id string) error {
+// DeleteMessage removes a message by queue and ID.
+func (s *BadgerStorage) DeleteMessage(queue, id string) error {
 	return s.db.Update(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		prefix := []byte(msgPrefix)
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			key := it.Item().Key()
-			// Key format: msg:{queue}:{id}
-			parts := strings.Split(string(key), ":")
-			if len(parts) >= 3 && parts[len(parts)-1] == id {
-				return txn.Delete(key)
-			}
-		}
-		return nil
+		return txn.Delete(msgKey(queue, id))
 	})
 }
 
@@ -179,7 +169,7 @@ func (s *BadgerStorage) LoadMessages(queue string) ([]*Message, error) {
 			item := it.Item()
 			err := item.Value(func(val []byte) error {
 				var msg Message
-				if err := json.Unmarshal(val, &msg); err != nil {
+				if err := decodeMessage(val, &msg); err != nil {
 					return err
 				}
 				messages = append(messages, &msg)
@@ -241,6 +231,7 @@ func (s *BadgerStorage) LoadQueues() (map[string]QueueConfig, error) {
 
 // syncLoop periodically fsyncs data to disk.
 func (s *BadgerStorage) syncLoop() {
+	defer s.syncWg.Done()
 	ticker := time.NewTicker(s.syncInterval)
 	defer ticker.Stop()
 	for {
@@ -265,6 +256,7 @@ func (s *BadgerStorage) Close() error {
 			s.batcher.close()
 		}
 		close(s.done)
+		s.syncWg.Wait()
 		if err := s.db.Sync(); err != nil {
 			log.Printf("badger final sync error: %v", err)
 		}

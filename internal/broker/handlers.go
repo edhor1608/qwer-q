@@ -36,14 +36,15 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		msgID = NewULID()
 	}
 
+	now := time.Now()
 	msg := &Message{
 		ID:          msgID,
 		Queue:       req.GetQueue(),
 		Payload:     req.GetPayload(),
 		Headers:     req.GetHeaders(),
 		Attempt:     0,
-		PublishedAt: time.Now(),
-		VisibleAt:   time.Now(),
+		PublishedAt: now,
+		VisibleAt:   now,
 		OrderingKey: req.GetOrderingKey(),
 	}
 
@@ -103,7 +104,7 @@ func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string
 	}
 
 	if b.storage != nil {
-		b.storage.DeleteMessage(req.GetMessageId())
+		b.storage.DeleteMessage(queueName, req.GetMessageId())
 	}
 	return true
 }
@@ -132,7 +133,7 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 			result.Message.VisibleAt = time.Now()
 			dlq.Enqueue(result.Message)
 			if b.storage != nil {
-				b.storage.DeleteMessage(result.Message.ID)
+				b.storage.DeleteMessage(queueName, result.Message.ID)
 				b.storage.SaveMessage(result.Message)
 			}
 		}
@@ -154,7 +155,7 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 
 		if b.storage != nil {
 			// Delete from original queue storage
-			b.storage.DeleteMessage(result.Message.ID)
+			b.storage.DeleteMessage(queueName, result.Message.ID)
 			// Save to DLQ storage
 			b.storage.SaveMessage(result.Message)
 		}
@@ -257,13 +258,14 @@ func (b *Broker) HandleStreamPublish(req *protocol.PublishRequest) (*protocol.Pu
 		msgID = NewULID()
 	}
 
+	now := time.Now()
 	msg := &Message{
 		ID:          msgID,
 		Queue:       req.GetQueue(),
 		Payload:     req.GetPayload(),
 		Headers:     req.GetHeaders(),
 		Attempt:     0,
-		PublishedAt: time.Now(),
+		PublishedAt: now,
 	}
 
 	sq := b.GetOrCreateStreamQueue(req.GetQueue())

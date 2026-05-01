@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -18,8 +17,8 @@ import (
 )
 
 var (
-	ErrNotLeader  = errors.New("not leader")
-	ErrNoQuorum   = errors.New("cluster lost quorum")
+	ErrNotLeader   = errors.New("not leader")
+	ErrNoQuorum    = errors.New("cluster lost quorum")
 	ErrApplyFailed = errors.New("raft apply failed")
 )
 
@@ -41,7 +40,6 @@ type Config struct {
 
 // Node wraps a Raft node and provides the interface for the broker to replicate operations.
 type Node struct {
-	mu     sync.RWMutex
 	raft   *raft.Raft
 	fsm    *FSM
 	config Config

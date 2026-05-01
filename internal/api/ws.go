@@ -20,11 +20,6 @@ type queueDepthData struct {
 	InFlight int    `json:"in_flight"`
 }
 
-type consumerChangeData struct {
-	Name          string `json:"name"`
-	ConsumerCount int    `json:"consumer_count"`
-}
-
 // wsHub manages WebSocket connections and broadcasts.
 type wsHub struct {
 	mu      sync.RWMutex
@@ -57,7 +52,7 @@ func (hub *wsHub) broadcast(event wsEvent) {
 	for conn := range hub.clients {
 		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if _, err := conn.Write(data); err != nil {
-			// Client will be removed on next read error
+			continue
 		}
 	}
 }

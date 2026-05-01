@@ -20,8 +20,8 @@ type QueueConfig struct {
 	FailurePolicy string `json:"failure_policy"` // "dlq", "drop", "infinite"
 
 	// Stream mode fields
-	Mode              QueueMode `json:"mode,omitempty"`               // "queue" (default) or "stream"
-	RetentionMaxAge   int64     `json:"retention_max_age,omitempty"`  // Max age in seconds (0 = unlimited)
+	Mode              QueueMode `json:"mode,omitempty"`                // "queue" (default) or "stream"
+	RetentionMaxAge   int64     `json:"retention_max_age,omitempty"`   // Max age in seconds (0 = unlimited)
 	RetentionMaxBytes int64     `json:"retention_max_bytes,omitempty"` // Max total bytes (0 = unlimited)
 }
 
@@ -34,7 +34,7 @@ type StreamMessage struct {
 // Storage interface for message persistence.
 type Storage interface {
 	SaveMessage(msg *Message) error
-	DeleteMessage(id string) error
+	DeleteMessage(queue, id string) error
 	LoadMessages(queue string) ([]*Message, error)
 	SaveQueue(name string, config QueueConfig) error
 	LoadQueues() (map[string]QueueConfig, error)

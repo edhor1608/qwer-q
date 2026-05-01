@@ -357,6 +357,9 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 	state.queueName = req.GetQueue()
 	state.groupName = req.GetGroup()
 	state.msgCh = s.broker.HandleConsume(&req, state.clientAddr)
+	msgCh := state.msgCh
+	queueName := state.queueName
+	clientAddr := state.clientAddr
 
 	// Start delivery goroutine
 	state.deliverWg.Add(1)
@@ -364,16 +367,16 @@ func (s *Server) handleConsume(payload []byte, state *connState, conn net.Conn) 
 		defer state.deliverWg.Done()
 		for {
 			select {
-			case msg, ok := <-state.msgCh:
+			case msg, ok := <-msgCh:
 				if !ok {
 					return
 				}
-				LogConsume(state.queueName, msg.ID, state.clientAddr)
-				RecordConsume(state.queueName)
-				q := s.broker.GetQueue(state.queueName)
+				LogConsume(queueName, msg.ID, clientAddr)
+				RecordConsume(queueName)
+				q := s.broker.GetQueue(queueName)
 				if q != nil {
-					UpdateQueueDepth(state.queueName, q.Len())
-					UpdateInFlightCount(state.queueName, q.InFlightLen())
+					UpdateQueueDepth(queueName, q.Len())
+					UpdateInFlightCount(queueName, q.InFlightLen())
 				}
 
 				protoMsg := MessageToProto(msg)
