@@ -84,11 +84,10 @@ func RunRedeliveryTest(ctx context.Context, adapter adapters.Adapter, messageCou
 			}
 			mu.Unlock()
 
-			// Hold message for specified time (simulating slow processing)
-			// For adapters with visibility timeout, this should trigger redelivery
+			// Hold message without acknowledging it.
+			// Adapters that support at-least-once semantics can use this to trigger redelivery.
 			time.Sleep(holdTime)
-
-			return nil
+			return adapters.ErrSkipAck
 		})
 	}()
 

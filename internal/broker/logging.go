@@ -33,7 +33,7 @@ func LogDisconnect(addr string) {
 
 // LogPublish logs a message publish.
 func LogPublish(queue, messageID, clientAddr string) {
-	logger.Info("message published",
+	logger.Debug("message published",
 		"queue", queue,
 		"message_id", messageID,
 		"client", clientAddr,
@@ -42,7 +42,7 @@ func LogPublish(queue, messageID, clientAddr string) {
 
 // LogConsume logs a message delivery.
 func LogConsume(queue, messageID, clientAddr string) {
-	logger.Info("message delivered",
+	logger.Debug("message delivered",
 		"queue", queue,
 		"message_id", messageID,
 		"client", clientAddr,
@@ -60,7 +60,7 @@ func LogAck(queue, messageID, clientAddr string) {
 
 // LogNack logs a message negative acknowledgment.
 func LogNack(queue, messageID, clientAddr string, requeue bool) {
-	logger.Info("message nacked",
+	logger.Debug("message nacked",
 		"queue", queue,
 		"message_id", messageID,
 		"client", clientAddr,

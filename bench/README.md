@@ -23,6 +23,9 @@ docker compose -f bench/docker-compose.yml up -d
 # Run stress tests
 go run bench/cmd/stress/main.go --queues=qwerq,nats,kafka --duration=30s
 
+# Run the first product-shaped benchmark
+go run bench/cmd/bench/main.go --queue qwerq --scenario queue-core --duration 5s
+
 # Run weakness-finding tests
 go run bench/cmd/weakness/main.go --queues=qwerq --skip-docker
 ```
@@ -50,6 +53,40 @@ bench/
 │   └── throughput.go   # Throughput tests
 └── docker-compose.yml  # All queue systems for comparison
 ```
+
+## Product-Shaped Benchmark
+
+The benchmark suite now includes three product-shaped scenarios:
+
+1. `queue-core`
+   Measures the shared queue category baseline:
+   - throughput
+   - latency
+   - ordering
+   - redelivery behavior
+
+2. `typed-queue`
+   Measures QWER-Q's typed contract path:
+   - valid publish throughput with schema validation enabled
+   - typed-path latency probe
+   - invalid publish rejection rate
+   - explicit unsupported results for systems without broker-enforced schemas
+
+3. `operator-core`
+   Measures operator-facing behavior:
+   - backlog drain speed
+   - crash durability
+   - restart recovery time
+
+Run them with:
+
+```bash
+go run bench/cmd/bench/main.go --queue qwerq --scenario queue-core
+go run bench/cmd/bench/main.go --queue qwerq --scenario typed-queue
+go run bench/cmd/bench/main.go --queue qwerq --scenario operator-core
+```
+
+These are the executable first-pass scoreboards from `docs/plans/2026-04-13-benchmark-charter.md`.
 
 ## Test Categories
 
@@ -92,6 +129,15 @@ go run bench/cmd/stress/main.go --queues=qwerq,nats --tests=burst
 
 # Test message sizes
 go run bench/cmd/stress/main.go --queues=qwerq,kafka --tests=sizes
+
+# Run queue-core against one system
+go run bench/cmd/bench/main.go --queue qwerq --scenario queue-core
+
+# Run typed-queue against one system
+go run bench/cmd/bench/main.go --queue qwerq --scenario typed-queue
+
+# Run operator-core against one system
+go run bench/cmd/bench/main.go --queue qwerq --scenario operator-core
 
 # Run all tests for 60 seconds each
 go run bench/cmd/stress/main.go --duration=60s --tests=all

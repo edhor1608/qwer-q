@@ -77,6 +77,7 @@ qwer-q serve [flags]
       --metrics-port int  metrics port (default 9877)
       --data-dir string   data directory for persistence
       --schema-mode string  schema enforcement: permissive|strict (default permissive)
+      --sync-interval duration   fsync interval for queue data (default 100ms, 0 = every write)
       --batch-interval duration  write batch flush interval (default 0 = off)
       --auth-token string  require client auth token
       --cluster-node-id string   enable clustering mode (preview)

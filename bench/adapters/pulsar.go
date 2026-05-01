@@ -92,7 +92,12 @@ func (a *PulsarAdapter) Consume(ctx context.Context, queue string, handler func(
 				}
 				return err
 			}
-			if err := handler(msg.Payload()); err != nil {
+			err = handler(msg.Payload())
+			if err == ErrSkipAck {
+				consumer.Nack(msg)
+				continue
+			}
+			if err != nil {
 				consumer.Nack(msg)
 				return err
 			}

@@ -113,7 +113,7 @@ With 100ms sync interval (default), throughput is ~500-1000/s. This is a design 
 
 **Classification:** This is an **expected trade-off**, not a bug. Default is 100ms sync interval.
 
-**Note:** The `--sync-interval` CLI flag is not yet implemented. The storage layer supports `WithSyncInterval()` option but it's not exposed via CLI. For now, only the default 100ms interval is available.
+**Update:** The `--sync-interval` CLI flag is now implemented on `qwer-q serve`. The broker still defaults to `100ms`, but runtime durability/performance tradeoffs are now operator-controlled.
 
 **Action:** Document trade-offs clearly. No code fix needed.
 

@@ -3,6 +3,7 @@ package broker
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -59,6 +60,28 @@ func TestUpdateInFlightCount(t *testing.T) {
 	count := testutil.ToFloat64(inFlightCount.WithLabelValues("flight-queue"))
 	if count != 10 {
 		t.Errorf("expected in-flight count 10, got %f", count)
+	}
+}
+
+func BenchmarkRecordPublish(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		RecordPublish("bench-metrics", 0.001)
+	}
+}
+
+func BenchmarkUpdateQueueMetrics(b *testing.B) {
+	q := NewQueue("bench-queue-metrics")
+	for i := 0; i < 1024; i++ {
+		q.Enqueue(&Message{ID: strings.Repeat("a", 26), Queue: q.name, VisibleAt: time.Now()})
+	}
+	msgCh := q.Dequeue(30 * time.Second)
+	if msg := <-msgCh; msg == nil {
+		b.Fatal("expected message")
+	}
+
+	for i := 0; i < b.N; i++ {
+		UpdateQueueDepth(q.name, q.Len())
+		UpdateInFlightCount(q.name, q.InFlightLen())
 	}
 }
 

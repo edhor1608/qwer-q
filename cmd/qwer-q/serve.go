@@ -29,6 +29,7 @@ func init() {
 	serveCmd.Flags().Int("metrics-port", 9877, "metrics server port")
 	serveCmd.Flags().String("data-dir", "/data", "data directory for message persistence")
 	serveCmd.Flags().String("max-message-size", "1MB", "maximum message payload size (e.g., 1MB, 512KB)")
+	serveCmd.Flags().Duration("sync-interval", 100*time.Millisecond, "how often to fsync queue data (0 = every write)")
 	serveCmd.Flags().Duration("batch-interval", 0, "write batch flush interval (e.g., 5ms). 0 = no batching")
 	serveCmd.Flags().String("auth-token", "", "require clients to authenticate with this token (env: QWERQ_AUTH_TOKEN)")
 	serveCmd.Flags().String("schema-mode", "permissive", "schema enforcement mode: permissive or strict (env: QWERQ_SCHEMA_MODE)")
@@ -49,6 +50,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	metricsPort, _ := cmd.Flags().GetInt("metrics-port")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	maxMsgSize, _ := cmd.Flags().GetString("max-message-size")
+	syncInterval, _ := cmd.Flags().GetDuration("sync-interval")
 	batchInterval, _ := cmd.Flags().GetDuration("batch-interval")
 	authToken, _ := cmd.Flags().GetString("auth-token")
 	schemaModeStr, _ := cmd.Flags().GetString("schema-mode")
@@ -80,6 +82,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Initialize persistent storage if data directory is specified
 	if dataDir != "" {
 		var storageOpts []storage.StorageOption
+		storageOpts = append(storageOpts, storage.WithSyncInterval(syncInterval))
 		if batchInterval > 0 {
 			storageOpts = append(storageOpts, storage.WithBatchInterval(batchInterval))
 		}

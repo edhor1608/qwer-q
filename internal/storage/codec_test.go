@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"testing"
 	"time"
@@ -20,11 +21,11 @@ func TestEncodeDecodeMessageRoundTrip(t *testing.T) {
 	}
 
 	data := encodeMessage(msg)
-	if len(data) == 0 || data[0] != messageEncodingV1 {
-		t.Fatalf("expected binary message encoding")
+	if len(data) == 0 || data[0] != messageEncodingV2 {
+		t.Fatalf("expected v2 binary message encoding")
 	}
 
-	var decoded Message
+	decoded := Message{ID: msg.ID, Queue: msg.Queue}
 	if err := decodeMessage(data, &decoded); err != nil {
 		t.Fatalf("decodeMessage failed: %v", err)
 	}
@@ -40,6 +41,43 @@ func TestEncodeDecodeMessageRoundTrip(t *testing.T) {
 	}
 	if !decoded.PublishedAt.Equal(msg.PublishedAt) || !decoded.VisibleAt.Equal(msg.VisibleAt) {
 		t.Fatalf("timestamp mismatch: got %v/%v want %v/%v", decoded.PublishedAt, decoded.VisibleAt, msg.PublishedAt, msg.VisibleAt)
+	}
+}
+
+func TestDecodeMessage_V1Compatibility(t *testing.T) {
+	msg := &Message{
+		ID:          "compat-id",
+		Queue:       "compat-q",
+		Payload:     []byte("payload"),
+		Headers:     map[string]string{"x-test": "1"},
+		Attempt:     2,
+		PublishedAt: time.Unix(0, 111),
+		VisibleAt:   time.Unix(0, 222),
+		OrderingKey: "key",
+		Sequence:    9,
+	}
+
+	data := []byte{messageEncodingV1}
+	data = appendString(data, msg.ID)
+	data = appendString(data, msg.Queue)
+	data = appendBytes(data, msg.Payload)
+	data = binary.AppendUvarint(data, uint64(len(msg.Headers)))
+	for k, v := range msg.Headers {
+		data = appendString(data, k)
+		data = appendString(data, v)
+	}
+	data = binary.AppendUvarint(data, uint64(msg.Attempt))
+	data = binary.AppendVarint(data, msg.PublishedAt.UnixNano())
+	data = binary.AppendVarint(data, msg.VisibleAt.UnixNano())
+	data = appendString(data, msg.OrderingKey)
+	data = binary.AppendUvarint(data, msg.Sequence)
+
+	var decoded Message
+	if err := decodeMessage(data, &decoded); err != nil {
+		t.Fatalf("decodeMessage v1 failed: %v", err)
+	}
+	if decoded.ID != msg.ID || decoded.Queue != msg.Queue || decoded.Attempt != msg.Attempt || decoded.OrderingKey != msg.OrderingKey || decoded.Sequence != msg.Sequence {
+		t.Fatalf("v1 decode mismatch: %#v", decoded)
 	}
 }
 

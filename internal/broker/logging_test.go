@@ -25,7 +25,7 @@ func TestLogging(t *testing.T) {
 
 func TestLogPublish(t *testing.T) {
 	var buf bytes.Buffer
-	testLogger := slog.New(slog.NewJSONHandler(&buf, nil))
+	testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	SetLogger(testLogger)
 
 	LogPublish("test-queue", "msg-123", "127.0.0.1:12345")

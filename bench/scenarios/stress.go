@@ -112,13 +112,13 @@ func RunSustainedLoad(ctx context.Context, adapter adapters.Adapter, cfg StressC
 	wg.Wait()
 
 	return &harness.Result{
-		Queue:       adapter.Name(),
-		Published:   published.Load(),
-		Consumed:    consumed.Load(),
-		Duration:    cfg.Duration,
-		PubErrors:   pubErrors.Load(),
-		ConErrors:   conErrors.Load(),
-		Samples:     convertSamples(samples),
+		Queue:     adapter.Name(),
+		Published: published.Load(),
+		Consumed:  consumed.Load(),
+		Duration:  cfg.Duration,
+		PubErrors: pubErrors.Load(),
+		ConErrors: conErrors.Load(),
+		Samples:   convertSamples(samples),
 	}, nil
 }
 
@@ -188,16 +188,16 @@ func RunMessageSizes(ctx context.Context, adapter adapters.Adapter, duration tim
 		adapter.Teardown()
 
 		results = append(results, harness.SizeResult{
-			Size:     size,
+			Size:       size,
 			MsgsPerSec: float64(published.Load()) / duration.Seconds(),
-			MBPerSec: float64(published.Load()) * float64(size) / duration.Seconds() / 1024 / 1024,
+			MBPerSec:   float64(published.Load()) * float64(size) / duration.Seconds() / 1024 / 1024,
 		})
 	}
 
 	return results, nil
 }
 
-// RunQueueDepth tests performance with pre-filled queue
+// RunQueueDepth tests performance with pre-filled queue.
 func RunQueueDepth(ctx context.Context, adapter adapters.Adapter, prefill int, consumeDuration time.Duration) (*harness.DepthResult, error) {
 	if err := adapter.Setup(ctx); err != nil {
 		return nil, err
@@ -221,7 +221,7 @@ func RunQueueDepth(ctx context.Context, adapter adapters.Adapter, prefill int, c
 	fillDuration := time.Since(fillStart)
 	fmt.Printf("  Filled in %v (%.0f msgs/sec)\n", fillDuration, float64(prefill)/fillDuration.Seconds())
 
-	// Now consume and measure
+	// Now consume and measure until backlog is drained or timeout is reached.
 	var consumed atomic.Int64
 	consumeStart := time.Now()
 
@@ -232,8 +232,10 @@ func RunQueueDepth(ctx context.Context, adapter adapters.Adapter, prefill int, c
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		adapter.Consume(testCtx, queue, func(msg []byte) error {
-			consumed.Add(1)
+		_ = adapter.Consume(testCtx, queue, func(msg []byte) error {
+			if consumed.Add(1) >= int64(prefill) {
+				cancel()
+			}
 			return nil
 		})
 	}()
@@ -242,12 +244,12 @@ func RunQueueDepth(ctx context.Context, adapter adapters.Adapter, prefill int, c
 	consumeTime := time.Since(consumeStart)
 
 	return &harness.DepthResult{
-		Prefilled:     prefill,
-		Consumed:      consumed.Load(),
-		FillTime:      fillDuration,
-		ConsumeTime:   consumeTime,
-		FillRate:      float64(prefill) / fillDuration.Seconds(),
-		ConsumeRate:   float64(consumed.Load()) / consumeTime.Seconds(),
+		Prefilled:   prefill,
+		Consumed:    consumed.Load(),
+		FillTime:    fillDuration,
+		ConsumeTime: consumeTime,
+		FillRate:    float64(prefill) / fillDuration.Seconds(),
+		ConsumeRate: float64(consumed.Load()) / consumeTime.Seconds(),
 	}, nil
 }
 
@@ -318,12 +320,12 @@ func RunBurstTest(ctx context.Context, adapter adapters.Adapter, burstSize int, 
 	}
 
 	return &harness.BurstResult{
-		BurstSize:     burstSize,
-		BurstInterval: burstInterval,
-		TotalBursts:   len(burstLatencies),
+		BurstSize:      burstSize,
+		BurstInterval:  burstInterval,
+		TotalBursts:    len(burstLatencies),
 		TotalPublished: totalPublished.Load(),
-		TotalConsumed: totalConsumed.Load(),
-		AvgBurstTime:  avgBurstTime,
+		TotalConsumed:  totalConsumed.Load(),
+		AvgBurstTime:   avgBurstTime,
 	}, nil
 }
 

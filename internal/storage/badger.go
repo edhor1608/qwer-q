@@ -167,8 +167,10 @@ func (s *BadgerStorage) LoadMessages(queue string) ([]*Message, error) {
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
+			key := item.KeyCopy(nil)
+			id := string(key[len(prefix):])
 			err := item.Value(func(val []byte) error {
-				var msg Message
+				msg := Message{ID: id, Queue: queue}
 				if err := decodeMessage(val, &msg); err != nil {
 					return err
 				}

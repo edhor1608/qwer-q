@@ -43,7 +43,7 @@ func (a *NATSAdapter) Publish(ctx context.Context, queue string, payload []byte)
 func (a *NATSAdapter) Consume(ctx context.Context, queue string, handler func([]byte) error) error {
 	var err error
 	a.sub, err = a.conn.Subscribe(queue, func(msg *nats.Msg) {
-		handler(msg.Data)
+		_ = handler(msg.Data)
 	})
 	if err != nil {
 		return err
