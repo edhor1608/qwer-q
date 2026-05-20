@@ -31,6 +31,20 @@ This ensures knowledge accumulates as branches merge to main. Location:
 - `docs/plans/decisions-log.md` for architectural decisions
 - `docs/plans/YYYY-MM-DD-<topic>.md` for optimization loops and investigations
 
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in Linear: durable planning in Linear Documents, executable work in Linear Issues/Subissues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Linear triage uses `needs-triage`, `needs-info`, `AFK`, `HITL`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo: use `CLAUDE.md` for project context and `docs/plans/decisions-log.md` plus `docs/plans/` for decisions and planning history. See `docs/agents/domain.md`.
+
 ## Optimization Loop Documentation
 
 **Every optimization loop must be documented with:**
