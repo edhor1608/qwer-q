@@ -15,12 +15,16 @@ Keep Linear project descriptions short: goal, scope, and links to important Docu
 
 ## Naming conventions
 
-Preserve established bracketed prefixes instead of inventing a new taxonomy.
+Bracketed prefixes are a naming convention for grouping by product, effort, surface area, or work type. Preserve locally established prefixes instead of inventing a new taxonomy.
 
-- **Project prefixes**: Existing workspace prefixes include `[Cards]`, `[Picalyze]`, `[pi]`, `[pi-gui]`, and `[design-agent]`. Newer Stead projects currently use plain names such as `Stead Platform`.
-- **Issue prefixes**: Preserve nearby issue title prefixes such as `[API]`, `[UI]`, `[Feature]`, `[Milestone]`, and `[pi]`.
-- **Domain labels**: Keep product/domain labels separate from workflow labels. Existing domain labels include `Cards`, `picalyze`, `pi`, and `stead`.
-- **New work**: Follow the nearest existing Project and Issue naming pattern. If no pattern is clear, ask before creating a new prefix.
+### Decision rationale
+
+The previous setup used concrete prefixes from unrelated Linear workspace projects, which made this repo depend on external project names. The guidance below keeps the bracket-prefix convention but makes it local: project prefixes, issue prefixes, and domain labels are separate so agents can preserve existing structure without mixing product taxonomy with workflow state.
+
+- **Project prefixes**: Use locally established project prefixes for product or effort areas, for example `[Product]`, `[Tooling]`, or another prefix already present in this repo's Linear project.
+- **Issue prefixes**: Use locally established issue prefixes for type or surface area, for example `[API]`, `[UI]`, `[Feature]`, `[Milestone]`, or another prefix already present in nearby issues.
+- **Domain labels**: Keep product/domain labels separate from workflow labels such as `AFK`, `HITL`, `needs-triage`, `needs-info`, and `wontfix`.
+- **New work**: Follow the nearest existing naming pattern in this repo or project. If no local pattern is clear, ask before creating a new prefix.
 
 ## Common operations
 
