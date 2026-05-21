@@ -1,0 +1,19 @@
+docs/agents/issue-tracker.md
+  s_38f1ed47f7d409::t_d8298f6db68a3f 20-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "3ecde44cb236f46e018db850c84be03e7218c3fe",
+  "prompts": {},
+  "sessions": {
+    "s_38f1ed47f7d409": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e45d0-5f91-71a1-84fe-7b838b1f5666",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
