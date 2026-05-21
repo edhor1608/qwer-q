@@ -24,7 +24,7 @@ Standard build/test/lint commands are in the `Makefile`. Quick reference:
 
 ### Caveats
 
-- **golangci-lint version**: The `.golangci.yml` config is written for golangci-lint v1.x. Do not install v2.x (it requires a different config format with a `version` field). Install v1.64.8 specifically: `curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sudo sh -s -- -b /usr/local/bin v1.64.8`.
+- **golangci-lint version**: The `.golangci.yml` config is written for golangci-lint v1.x. Do not install v2.x (it requires a different config format with a `version` field). Install v1.64.8 specifically: `curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8`.
 - **No external dependencies**: The broker uses embedded BadgerDB for persistence. No Postgres, Redis, or Docker is required to build, test, or run locally.
 - **Protobuf codegen is pre-committed**: The generated Go code (`internal/protocol/messages.pb.go`) is checked in. You do not need `protoc` unless modifying `proto/qwerq.proto`.
 - **Data directory**: When running the broker locally, use `--data-dir ./data` to keep persistence data in the workspace. Clean with `rm -rf ./data`.
