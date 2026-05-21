@@ -1,0 +1,9 @@
+docs/agents/issue-tracker.md
+  ai_agent 18,20-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "58837f8cc0932b7bbe84705365f6377d417f3480",
+  "prompts": {}
+}
