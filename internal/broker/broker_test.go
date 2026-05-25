@@ -354,7 +354,11 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 
 	// Ack
 	ackReq := &protocol.AckRequest{MessageId: msgID}
-	if !b.HandleAck(ackReq, "ack-queue", "") {
+	ok, err := b.HandleAck(ackReq, "ack-queue", "")
+	if err != nil {
+		t.Fatalf("ack failed: %v", err)
+	}
+	if !ok {
 		t.Fatal("ack failed")
 	}
 
@@ -362,6 +366,199 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 	messages, _ := store.LoadMessages("ack-queue")
 	if len(messages) != 0 {
 		t.Fatalf("expected 0 messages in storage after ack, got %d", len(messages))
+	}
+}
+
+func TestBrokerAckKeepsMessageInFlightWhenStorageDeleteFails(t *testing.T) {
+	deleteErr := errors.New("delete failed")
+	store := &retryDLQFailingStorage{deleteRollbackErr: deleteErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "ack-delete-fail",
+		Payload: []byte("acked but not deleted"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	q := b.GetQueue("ack-delete-fail")
+	ch := q.Dequeue(30 * time.Second)
+	<-ch
+
+	ok, err := b.HandleAck(&protocol.AckRequest{MessageId: resp.MessageId}, "ack-delete-fail", "")
+	if ok {
+		t.Fatal("expected ack to fail")
+	}
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("expected delete error, got %v", err)
+	}
+	if q.InFlightLen() != 1 {
+		t.Fatalf("expected message to stay in-flight, got %d", q.InFlightLen())
+	}
+}
+
+func TestBrokerDropPolicyNackDoesNotRecoverAfterRestart(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-drop-nack-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("drop-queue", storage.QueueConfig{FailurePolicy: string(FailurePolicyDrop)}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	q := b.GetOrCreateQueue("drop-queue")
+	q.SetFailurePolicy(FailurePolicyDrop)
+
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "drop-queue",
+		Payload: []byte("drop me"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ch := q.Dequeue(30 * time.Second)
+	<-ch
+	if !b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: false}, "drop-queue", "") {
+		t.Fatal("nack failed")
+	}
+	b.Close()
+
+	store2, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatalf("reopen storage: %v", err)
+	}
+	b2 := NewBroker(WithStorage(store2))
+	defer b2.Close()
+	if err := b2.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	if recovered := b2.GetQueue("drop-queue"); recovered != nil && recovered.Len() != 0 {
+		t.Fatalf("expected dropped message not to recover, got %d messages", recovered.Len())
+	}
+}
+
+func TestBrokerPublishFailsWhenQueueMetadataSaveFails(t *testing.T) {
+	saveQueueErr := errors.New("save queue failed")
+	store := &retryDLQFailingStorage{saveQueueErr: saveQueueErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "metadata-fail",
+		Payload: []byte("data"),
+	})
+	if !errors.Is(err, saveQueueErr) {
+		t.Fatalf("expected queue metadata error, got %v", err)
+	}
+	if q := b.GetQueue("metadata-fail"); q != nil {
+		t.Fatal("expected queue not to exist after metadata save failure")
+	}
+}
+
+func TestBrokerLoadFromStorageRestoresQueueConfig(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-queue-config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("configured", storage.QueueConfig{
+		MaxSize:       17,
+		MaxRetries:    3,
+		FailurePolicy: string(FailurePolicyDrop),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+	if err := b.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	q := b.GetQueue("configured")
+	if q == nil {
+		t.Fatal("queue not restored")
+	}
+	if q.MaxSize() != 17 {
+		t.Fatalf("expected max size 17, got %d", q.MaxSize())
+	}
+	if q.MaxRetries() != 3 {
+		t.Fatalf("expected max retries 3, got %d", q.MaxRetries())
+	}
+	if q.FailurePolicy() != FailurePolicyDrop {
+		t.Fatalf("expected failure policy drop, got %s", q.FailurePolicy())
+	}
+}
+
+func TestBrokerNackRequeuePersistsAttemptAcrossRestart(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-retry-attempt-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("retry-attempt", storage.QueueConfig{}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	q := b.GetOrCreateQueue("retry-attempt")
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "retry-attempt",
+		Payload: []byte("retry me"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ch := q.Dequeue(30 * time.Second)
+	first := <-ch
+	if first.Attempt != 1 {
+		t.Fatalf("expected first delivery attempt 1, got %d", first.Attempt)
+	}
+	q.RemoveConsumer(ch)
+	if !b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: true}, "retry-attempt", "") {
+		t.Fatal("nack failed")
+	}
+	b.Close()
+
+	store2, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatalf("reopen storage: %v", err)
+	}
+	b2 := NewBroker(WithStorage(store2))
+	defer b2.Close()
+	if err := b2.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	recovered := b2.GetQueue("retry-attempt")
+	if recovered == nil {
+		t.Fatal("queue not recovered")
+	}
+	next := <-recovered.Dequeue(30 * time.Second)
+	if next.Attempt != 2 {
+		t.Fatalf("expected retry attempt to survive restart and deliver attempt 2, got %d", next.Attempt)
 	}
 }
 
@@ -389,6 +586,88 @@ func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
 	}
 	if dlq.Len() != 1 {
 		t.Fatalf("expected dlq message to stay retryable, got %d messages", dlq.Len())
+	}
+}
+
+func TestBrokerPublishDoesNotDeliverWhenStorageSaveFails(t *testing.T) {
+	saveErr := errors.New("save failed")
+	store := &retryDLQFailingStorage{saveErr: saveErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("publish-fail")
+	ch := q.Dequeue(30 * time.Second)
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "publish-fail",
+		Payload: []byte("not durable"),
+	})
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("expected save error, got %v", err)
+	}
+
+	select {
+	case msg := <-ch:
+		t.Fatalf("expected no delivery after storage failure, got %s", msg.ID)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if q.Len() != 0 {
+		t.Fatalf("expected queue to stay empty, got %d messages", q.Len())
+	}
+	if q.InFlightLen() != 0 {
+		t.Fatalf("expected no in-flight messages, got %d", q.InFlightLen())
+	}
+}
+
+func TestBrokerPublishRollsBackStorageWhenEnqueueFails(t *testing.T) {
+	store := &retryDLQFailingStorage{}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("publish-full")
+	q.SetMaxSize(1)
+	if err := q.Enqueue(&Message{ID: "existing", Queue: "publish-full", Payload: []byte("full")}); err != nil {
+		t.Fatalf("enqueue existing message: %v", err)
+	}
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		MessageId: proto.String("msg-1"),
+		Queue:     "publish-full",
+		Payload:   []byte("overflow"),
+	})
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected queue full error, got %v", err)
+	}
+	if _, ok := store.saved["publish-full/msg-1"]; ok {
+		t.Fatal("expected failed publish storage write to be rolled back")
+	}
+	if q.Len() != 1 {
+		t.Fatalf("expected queue to keep only existing message, got %d messages", q.Len())
+	}
+}
+
+func TestBrokerPublishReturnsRollbackErrorWhenEnqueueRollbackFails(t *testing.T) {
+	rollbackErr := errors.New("rollback failed")
+	store := &retryDLQFailingStorage{deleteRollbackErr: rollbackErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("publish-rollback-fail")
+	q.SetMaxSize(1)
+	if err := q.Enqueue(&Message{ID: "existing", Queue: "publish-rollback-fail", Payload: []byte("full")}); err != nil {
+		t.Fatalf("enqueue existing message: %v", err)
+	}
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		MessageId: proto.String("msg-1"),
+		Queue:     "publish-rollback-fail",
+		Payload:   []byte("overflow"),
+	})
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected queue full error, got %v", err)
+	}
+	if !errors.Is(err, rollbackErr) {
+		t.Fatalf("expected rollback error, got %v", err)
 	}
 }
 
@@ -553,6 +832,7 @@ func TestBrokerPurgeQueueDoesNotPurgeRuntimeWhenStorageFails(t *testing.T) {
 
 type retryDLQFailingStorage struct {
 	saveErr           error
+	saveQueueErr      error
 	deleteDLQErr      error
 	deleteDLQFailAt   int
 	deleteDLQCalls    int
@@ -597,7 +877,7 @@ func (s *retryDLQFailingStorage) LoadMessages(_ string) ([]*storage.Message, err
 }
 
 func (s *retryDLQFailingStorage) SaveQueue(_ string, _ storage.QueueConfig) error {
-	return nil
+	return s.saveQueueErr
 }
 
 func (s *retryDLQFailingStorage) LoadQueues() (map[string]storage.QueueConfig, error) {

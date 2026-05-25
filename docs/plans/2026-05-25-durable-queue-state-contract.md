@@ -43,15 +43,18 @@ A pending message is accepted for a queue and not currently in-flight.
 Contract:
 
 - A successfully published message must be recoverable after broker restart.
+- With durable storage enabled, publish saves the message before exposing it to
+  runtime delivery.
+- If the durable save fails, publish fails and the message is not visible to
+  consumers.
+- If runtime enqueue fails after a durable save, the durable write is rolled
+  back and publish fails.
 - After restart, recovered queue-mode messages are eligible for delivery.
 - Queue mode does not provide replay after ack.
 
 Current implementation notes:
 
-- Publish currently enqueues in memory before saving to storage. If storage save
-  fails after enqueue, runtime state can temporarily contain a message that is
-  not durable.
-- Queue config persistence errors are currently ignored when queues are created.
+- Queue-mode publish fails when auto-created queue metadata cannot be persisted.
 
 ### In-flight
 
@@ -77,14 +80,16 @@ An acked message has been successfully processed by a consumer.
 
 Contract:
 
-- Ack removes the message from runtime state.
 - Ack removes the message from durable storage.
+- Ack removes the message from runtime state only after durable deletion
+  succeeds.
+- If durable deletion fails, ack fails and the message remains in-flight for the
+  current broker process.
 - An acked message must not reappear after restart.
 
 Current implementation notes:
 
-- Ack deletes from storage after the queue or group ack succeeds.
-- Storage delete errors are not surfaced by the broker ack result today.
+- Ack returns storage deletion errors to the server boundary.
 
 ### Nacked With Requeue
 
@@ -98,10 +103,10 @@ Contract:
 
 Current implementation notes:
 
-- Requeue updates runtime delivery state. The original stored message remains,
-  so restart recovery preserves at-least-once delivery.
-- Attempt count and visibility updates are not durably updated on requeue today,
-  so retry-limit behavior can reset after restart.
+- Queue-mode nack requeue updates runtime delivery state and persists the
+  updated attempt state for restart recovery.
+- Visibility-timeout retry attempt durability is tracked separately in EDH-380.
+- Consumer-group retry attempt durability is tracked separately in EDH-381.
 
 ### Nacked Without Requeue
 
@@ -118,8 +123,9 @@ Current implementation notes:
 
 - DLQ movement deletes the original queue storage entry and saves the message
   under the DLQ name.
-- Non-DLQ terminal outcomes can leave the original stored message behind today,
-  which can make dropped messages reappear after restart.
+- Drop-policy terminal nack outcomes delete the original queue storage entry.
+- Non-DLQ terminal outcomes other than drop-policy still need explicit product
+  semantics before further behavior changes.
 
 ### Dead Letter Queue
 
@@ -219,18 +225,19 @@ Contract:
 Current implementation notes:
 
 - Recovery only loads messages for queues present in stored queue metadata.
-- Queue metadata is saved when a queue is created, but errors are ignored.
+- Queue-mode publish fails when auto-created queue metadata cannot be persisted.
+- New queue metadata is persisted with the current default queue config.
 
 ## Known Gaps For Follow-Up Issues
 
 These gaps are intentionally captured here so the follow-up TDD issues can turn
 them into failing behavior tests before implementation changes:
 
-1. Publish mutates runtime state before storage success is known.
-2. Queue metadata save errors are ignored.
-3. Ack does not surface storage delete failures.
-4. Requeue does not persist attempt count or visibility updates.
-5. Terminal non-DLQ nack outcomes can leave stored messages behind.
+1. Visibility-timeout retry attempt durability is not decided.
+2. Terminal nack storage failure propagation is not implemented.
+3. Nack requeue retry-state save failure propagation is not implemented.
+4. Queue config zero-value compatibility is not decided.
+5. Stream queue metadata save errors are ignored.
 6. Queue purge and DLQ purge do not delete durable message state.
 7. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.

@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"errors"
 	"time"
 
 	"github.com/jonas/qwer-q/internal/protocol"
@@ -48,15 +49,22 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		OrderingKey: req.GetOrderingKey(),
 	}
 
-	q := b.GetOrCreateQueue(req.GetQueue())
-	if err := q.Enqueue(msg); err != nil {
+	q, err := b.GetOrCreateQueueWithError(req.GetQueue())
+	if err != nil {
 		return nil, err
 	}
-
 	if b.storage != nil {
 		if err := b.storage.SaveMessage(msg); err != nil {
 			return nil, err
 		}
+	}
+	if err := q.Enqueue(msg); err != nil {
+		if b.storage != nil {
+			if rbErr := b.storage.DeleteMessage(msg.Queue, msg.ID); rbErr != nil {
+				return nil, errors.Join(err, rbErr)
+			}
+		}
+		return nil, err
 	}
 
 	return &protocol.PublishResponse{MessageId: msgID}, nil
@@ -83,30 +91,28 @@ func (b *Broker) HandleConsume(req *protocol.ConsumeRequest, memberID string) <-
 
 // HandleAck processes an ack request.
 // If groupName is non-empty, ack within that group instead of the queue's ungrouped consumers.
-func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string) bool {
+func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string) (bool, error) {
 	q := b.GetQueue(queueName)
 	if q == nil {
-		return false
+		return false, nil
+	}
+
+	deleteStored := func(*Message) error {
+		if b.storage == nil {
+			return nil
+		}
+		return b.storage.DeleteMessage(queueName, req.GetMessageId())
 	}
 
 	if groupName != "" {
 		g := q.GetGroup(groupName)
 		if g == nil {
-			return false
+			return false, nil
 		}
-		if !g.Ack(req.GetMessageId()) {
-			return false
-		}
-	} else {
-		if !q.Ack(req.GetMessageId()) {
-			return false
-		}
+		return g.ackWithHook(req.GetMessageId(), deleteStored)
 	}
 
-	if b.storage != nil {
-		b.storage.DeleteMessage(queueName, req.GetMessageId())
-	}
-	return true
+	return q.ackWithHook(req.GetMessageId(), deleteStored)
 }
 
 // HandleNack processes a nack request.
@@ -137,6 +143,15 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 				b.storage.SaveMessage(result.Message)
 			}
 		}
+		if result.Dropped && b.storage != nil {
+			if err := b.storage.DeleteMessage(queueName, req.GetMessageId()); err != nil {
+				LogError("failed to delete dropped group message from storage", err,
+					"queue", queueName,
+					"message_id", req.GetMessageId(),
+					"group", groupName,
+				)
+			}
+		}
 		return true
 	}
 
@@ -158,6 +173,25 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 			b.storage.DeleteMessage(queueName, result.Message.ID)
 			// Save to DLQ storage
 			b.storage.SaveMessage(result.Message)
+		}
+	}
+	if result.Dropped && b.storage != nil {
+		if err := b.storage.DeleteMessage(queueName, req.GetMessageId()); err != nil {
+			LogError("failed to delete dropped message from storage", err,
+				"queue", queueName,
+				"message_id", req.GetMessageId(),
+			)
+		}
+	}
+	if req.GetRequeue() && !result.ToDLQ && !result.Dropped && result.Message != nil && b.storage != nil {
+		msgCopy := *result.Message
+		msgCopy.VisibleAt = time.Now()
+		if err := b.storage.SaveMessage(&msgCopy); err != nil {
+			LogError("failed to persist requeued message", err,
+				"queue", queueName,
+				"message_id", msgCopy.ID,
+				"visible_at", msgCopy.VisibleAt,
+			)
 		}
 	}
 

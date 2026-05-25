@@ -52,7 +52,11 @@ func BenchmarkPersistentPublishDequeueAck(b *testing.B) {
 		}
 
 		ackReq.MessageId = msg.ID
-		if !broker.HandleAck(ackReq, queueName, "") {
+		ok, err := broker.HandleAck(ackReq, queueName, "")
+		if err != nil {
+			b.Fatalf("ack failed for %s: %v", msg.ID, err)
+		}
+		if !ok {
 			b.Fatalf("ack failed for %s", msg.ID)
 		}
 	}

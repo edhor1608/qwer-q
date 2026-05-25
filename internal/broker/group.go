@@ -156,14 +156,25 @@ func (g *ConsumerGroup) tryDeliver() {
 
 // Ack acknowledges a message within this group.
 func (g *ConsumerGroup) Ack(messageID string) bool {
+	ok, _ := g.ackWithHook(messageID, nil)
+	return ok
+}
+
+func (g *ConsumerGroup) ackWithHook(messageID string, beforeAck func(*Message) error) (bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if _, ok := g.inFlight[messageID]; ok {
-		delete(g.inFlight, messageID)
-		g.tryDeliver()
-		return true
+	entry, ok := g.inFlight[messageID]
+	if !ok {
+		return false, nil
 	}
-	return false
+	if beforeAck != nil {
+		if err := beforeAck(entry.msg); err != nil {
+			return false, err
+		}
+	}
+	delete(g.inFlight, messageID)
+	g.tryDeliver()
+	return true, nil
 }
 
 // Nack negatively acknowledges a message within this group.
@@ -183,7 +194,7 @@ func (g *ConsumerGroup) Nack(messageID string, requeue bool, maxRetries uint32, 
 		if policy == FailurePolicyDLQ {
 			return NackResult{Found: true, Message: msg, ToDLQ: true}
 		}
-		return NackResult{Found: true, Message: msg, ToDLQ: false}
+		return NackResult{Found: true, Message: msg, Dropped: true}
 	}
 
 	// Check max retries
@@ -192,7 +203,7 @@ func (g *ConsumerGroup) Nack(messageID string, requeue bool, maxRetries uint32, 
 		case FailurePolicyDLQ:
 			return NackResult{Found: true, Message: msg, ToDLQ: true}
 		case FailurePolicyDrop:
-			return NackResult{Found: true, Message: msg, ToDLQ: false}
+			return NackResult{Found: true, Message: msg, Dropped: true}
 		}
 	}
 

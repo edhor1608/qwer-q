@@ -208,6 +208,15 @@ func (b *Broker) LoadFromStorage() error {
 			return err
 		}
 		q := b.GetOrCreateQueue(name)
+		if cfg.MaxSize != 0 {
+			q.SetMaxSize(cfg.MaxSize)
+		}
+		if cfg.MaxRetries != 0 {
+			q.SetMaxRetries(uint32(cfg.MaxRetries))
+		}
+		if cfg.FailurePolicy != "" {
+			q.SetFailurePolicy(FailurePolicy(cfg.FailurePolicy))
+		}
 		for _, sm := range storedMsgs {
 			msg := &Message{
 				ID:          sm.ID,
@@ -227,28 +236,41 @@ func (b *Broker) LoadFromStorage() error {
 
 // GetOrCreateQueue returns the queue with the given name, creating it if needed.
 func (b *Broker) GetOrCreateQueue(name string) *Queue {
+	q, _ := b.GetOrCreateQueueWithError(name)
+	return q
+}
+
+// GetOrCreateQueueWithError returns the queue with the given name, creating it if needed.
+func (b *Broker) GetOrCreateQueueWithError(name string) (*Queue, error) {
 	b.mu.RLock()
 	q, ok := b.queues[name]
 	b.mu.RUnlock()
 	if ok {
-		return q
+		return q, nil
 	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	// Double-check after acquiring write lock
 	if q, ok = b.queues[name]; ok {
-		return q
+		return q, nil
 	}
 	q = NewQueue(name)
-	b.queues[name] = q
 
 	// Persist queue config for recovery
 	if b.storage != nil {
-		b.storage.SaveQueue(name, storage.QueueConfig{})
+		cfg := storage.QueueConfig{
+			MaxSize:       q.maxSize,
+			MaxRetries:    int(q.maxRetries),
+			FailurePolicy: string(q.failurePolicy),
+		}
+		if err := b.storage.SaveQueue(name, cfg); err != nil {
+			return nil, err
+		}
 	}
+	b.queues[name] = q
 
-	return q
+	return q, nil
 }
 
 // GetOrCreateStreamQueue returns the stream queue with the given name, creating it if needed.

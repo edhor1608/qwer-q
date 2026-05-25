@@ -427,7 +427,12 @@ func (s *Server) handleAck(payload []byte, state *connState) []byte {
 		}
 	} else {
 		// Single-node mode
-		if !s.broker.HandleAck(&req, state.queueName, state.groupName) {
+		ok, err := s.broker.HandleAck(&req, state.queueName, state.groupName)
+		if err != nil {
+			LogError("ack failed", err, "queue", state.queueName)
+			return EncodeError(3, err.Error())
+		}
+		if !ok {
 			return EncodeError(4, "message not found")
 		}
 	}
