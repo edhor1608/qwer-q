@@ -1,0 +1,21 @@
+internal/storage/badger.go
+  s_2efdd75b4a3d60::t_a0b84e17761348 166-168
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_0768c6cb087c90 571-572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "9bab16ed65df32a8899c2b4b2d6e47c275f45270",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
