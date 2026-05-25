@@ -601,6 +601,40 @@ func TestBrokerNackRequeuePersistsAttemptAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestBrokerNackRequeueKeepsMessageInFlightWhenStorageSaveFails(t *testing.T) {
+	saveErr := errors.New("save failed")
+	store := &retryDLQFailingStorage{saveErr: saveErr, saveErrAfter: 1}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "requeue-save-fail",
+		Payload: []byte("retry me"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	q := b.GetQueue("requeue-save-fail")
+	ch := q.Dequeue(30 * time.Second)
+	<-ch
+	q.RemoveConsumer(ch)
+
+	ok, err := b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: true}, "requeue-save-fail", "")
+	if ok {
+		t.Fatal("expected nack to fail")
+	}
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("expected save error, got %v", err)
+	}
+	if q.InFlightLen() != 1 {
+		t.Fatalf("expected message to stay in-flight, got %d", q.InFlightLen())
+	}
+	if q.Len() != 0 {
+		t.Fatalf("expected message not to be requeued after storage failure, got %d pending", q.Len())
+	}
+}
+
 func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
 	saveErr := errors.New("save failed")
 	store := &retryDLQFailingStorage{saveErr: saveErr}
@@ -871,6 +905,8 @@ func TestBrokerPurgeQueueDoesNotPurgeRuntimeWhenStorageFails(t *testing.T) {
 
 type retryDLQFailingStorage struct {
 	saveErr           error
+	saveErrAfter      int
+	saveCalls         int
 	saveQueueErr      error
 	deleteDLQErr      error
 	deleteDLQFailAt   int
@@ -881,7 +917,8 @@ type retryDLQFailingStorage struct {
 }
 
 func (s *retryDLQFailingStorage) SaveMessage(msg *storage.Message) error {
-	if s.saveErr != nil {
+	s.saveCalls++
+	if s.saveErr != nil && (s.saveErrAfter == 0 || s.saveCalls > s.saveErrAfter) {
 		return s.saveErr
 	}
 	if s.saved == nil {
