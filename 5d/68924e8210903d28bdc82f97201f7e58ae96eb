@@ -1,0 +1,25 @@
+docs/plans/2026-05-25-durable-queue-state-contract.md
+  s_2efdd75b4a3d60::t_5798afdebb5b5e 106-109
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_7dea9350b9f0e5 469-498,500-519,522-524
+  s_2efdd75b4a3d60::t_84d1c48e0b4574 499,520-521
+internal/broker/handlers.go
+  s_2efdd75b4a3d60::t_f87a82fdbce21c 175,179
+  s_2efdd75b4a3d60::t_b2fc565594723c 176-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "5d68924e8210903d28bdc82f97201f7e58ae96eb",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
