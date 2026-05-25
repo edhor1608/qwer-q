@@ -105,3 +105,51 @@ architecture area that needs design before implementation.
 Use architecture review when a change would alter a durable contract, create a
 new module seam, change public protocol behavior, or reopen an existing
 decision.
+
+## High-Risk Behavior And Testing
+
+These behaviors define QWER-Q's product promise and need behavior-level tests:
+
+- restart recovery
+- publish durability
+- ack storage deletion
+- nack requeue and terminal failure
+- DLQ move, retry, and purge
+- queue purge
+- visibility timeout and redelivery
+- consumer group runtime behavior
+- ordering guarantees
+- schema enforcement modes
+- auth gating
+- protocol compatibility
+- storage cleanup and recovery
+- benchmark claim validity
+
+For broker semantics, prefer integration-style tests that use public or stable
+interfaces:
+
+- TCP frames or public clients for publish/consume/ack/nack behavior.
+- HTTP requests for operator API behavior.
+- Real temporary BadgerDB directories for restart recovery behavior.
+- Storage adapter tests only when the adapter behavior itself is the contract.
+
+Existing test categories to use as prior art:
+
+- `test/` for end-to-end broker behavior over TCP.
+- `internal/broker/*_test.go` for focused broker and queue semantics.
+- `internal/storage/*_test.go` for BadgerDB persistence behavior.
+- `internal/protocol/*_test.go` for frame and protocol compatibility.
+- `internal/api/*_test.go` for HTTP operator behavior.
+- `pkg/client/*_test.go` for Go client workflows.
+
+Performance work must preserve correctness before benchmark evidence matters.
+When optimizing a hot path:
+
+1. identify the queue-mode behavior that must not change
+2. add or confirm behavior coverage first
+3. make the smallest performance change
+4. run correctness tests
+5. then collect benchmark evidence
+
+Do not publish or rely on benchmark numbers without stating durability mode,
+environment, and benchmark policy status.
