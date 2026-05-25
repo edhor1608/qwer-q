@@ -8,22 +8,30 @@ test/integration_test.go
   s_2efdd75b4a3d60::t_e855bebb57feb2 203-217,314-340
   s_2efdd75b4a3d60::t_16a8f93e305ff9 305
   s_2efdd75b4a3d60::t_074b7d90e17e37 344,349-350,355,364,367,371,376-377,390,393,397,402-403,408-411,421,424
-internal/storage/storage.go
-  s_2efdd75b4a3d60::t_ffc2b927d10985 38
-internal/broker/dlq.go
-  s_2efdd75b4a3d60::t_0f36956787f20c 3-6,71,73
-  s_2efdd75b4a3d60::t_66a1ae67cd51c5 32-40,42-43,45-67,69-70,74-79,81
-  s_2efdd75b4a3d60::t_a17ef7fc0accf1 41,44,68
-  s_2efdd75b4a3d60::t_3d236e8772275d 72
+internal/storage/badger_test.go
+  s_2efdd75b4a3d60::t_57296dfe3d79ee 5
+  s_2efdd75b4a3d60::t_4be0c7c0a7a67f 105-149
 internal/storage/badger.go
-  s_2efdd75b4a3d60::t_dfb95f6d5efaf4 158-159,161,174,183,187,189-190
+  s_2efdd75b4a3d60::t_dfb95f6d5efaf4 158-159,161,174
+  s_2efdd75b4a3d60::t_54d8a75318c3a7 160,162-173,175-182,184-186,188
+internal/broker/queue.go
+  s_2efdd75b4a3d60::t_ffa72076a7bb5d 440-456
 internal/api/api.go
   s_2efdd75b4a3d60::t_4e7c9eff4d7cc5 170,174-178,222-224,232,236-238
+internal/broker/dlq.go
+  s_2efdd75b4a3d60::t_0f36956787f20c 3-6,71,73
+  s_2efdd75b4a3d60::t_66a1ae67cd51c5 32-40,42-43,45-67,69-70,74-79
+  s_2efdd75b4a3d60::t_a17ef7fc0accf1 41,44,68
+  s_2efdd75b4a3d60::t_3d236e8772275d 72
+  s_2efdd75b4a3d60::t_6da34c93ecd9fe 80
 internal/broker/broker_test.go
-  s_2efdd75b4a3d60::t_826afaad8c5fe2 4,368-396,398-419
-  s_2efdd75b4a3d60::t_270caa41a58a07 397,420-424,494-496,499-508,511-516
-  s_2efdd75b4a3d60::t_e3b821b6c0d93d 425-449,522,547-548
-  s_2efdd75b4a3d60::t_0033ed9ff7fc5c 518-519,523-524
+  s_2efdd75b4a3d60::t_826afaad8c5fe2 4,367-395,397-418
+  s_2efdd75b4a3d60::t_ca538a67be9e4f 5
+  s_2efdd75b4a3d60::t_270caa41a58a07 396,419-423,449
+  s_2efdd75b4a3d60::t_e3b821b6c0d93d 424-448,496-497
+  s_2efdd75b4a3d60::t_79deb9032144ad 450-493,520-521,541-544
+internal/storage/storage.go
+  s_2efdd75b4a3d60::t_ffc2b927d10985 38
 ---
 {
   "schema_version": "authorship/3.0.0",
