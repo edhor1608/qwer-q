@@ -286,38 +286,67 @@ type NackResult struct {
 // If requeue is true, the message is put back in the queue (subject to retry limits).
 // Returns NackResult indicating what to do with the message.
 func (q *Queue) Nack(messageID string, requeue bool) NackResult {
+	result, _ := q.nackWithHooks(messageID, requeue, nil, nil)
+	return result
+}
+
+func (q *Queue) nackWithHooks(messageID string, requeue bool, beforeDrop, beforeRequeue func(*Message) error) (NackResult, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	msg, ok := q.inFlight[messageID]
 	if !ok {
-		return NackResult{Found: false}
+		return NackResult{Found: false}, nil
 	}
-	delete(q.inFlight, messageID)
 
 	if !requeue {
 		// Explicit reject without requeue - send to DLQ if policy allows
 		if q.failurePolicy == FailurePolicyDLQ {
-			return NackResult{Found: true, Message: msg, ToDLQ: true}
+			delete(q.inFlight, messageID)
+			return NackResult{Found: true, Message: msg, ToDLQ: true}, nil
 		}
-		return NackResult{Found: true, Message: msg, Dropped: true}
+		result := NackResult{Found: true, Message: msg, Dropped: true}
+		if beforeDrop != nil {
+			if err := beforeDrop(msg); err != nil {
+				return result, err
+			}
+		}
+		delete(q.inFlight, messageID)
+		return result, nil
 	}
 
 	// Check if we've exceeded max retries
 	if q.failurePolicy != FailurePolicyInfinite && msg.Attempt >= q.maxRetries {
 		switch q.failurePolicy {
 		case FailurePolicyDLQ:
-			return NackResult{Found: true, Message: msg, ToDLQ: true}
+			delete(q.inFlight, messageID)
+			return NackResult{Found: true, Message: msg, ToDLQ: true}, nil
 		case FailurePolicyDrop:
-			return NackResult{Found: true, Message: msg, Dropped: true}
+			result := NackResult{Found: true, Message: msg, Dropped: true}
+			if beforeDrop != nil {
+				if err := beforeDrop(msg); err != nil {
+					return result, err
+				}
+			}
+			delete(q.inFlight, messageID)
+			return result, nil
 		}
 	}
 
 	// Requeue the message
-	msg.VisibleAt = time.Now()
+	visibleAt := time.Now()
+	if beforeRequeue != nil {
+		msgCopy := *msg
+		msgCopy.VisibleAt = visibleAt
+		if err := beforeRequeue(&msgCopy); err != nil {
+			return NackResult{Found: true, Message: msg}, err
+		}
+	}
+	delete(q.inFlight, messageID)
+	msg.VisibleAt = visibleAt
 	q.messages = append(q.messages, msg)
 	q.tryDeliver()
-	return NackResult{Found: true, Message: msg, ToDLQ: false}
+	return NackResult{Found: true, Message: msg, ToDLQ: false}, nil
 }
 
 // Len returns the number of messages in the queue (not in-flight).

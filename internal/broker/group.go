@@ -180,37 +180,58 @@ func (g *ConsumerGroup) ackWithHook(messageID string, beforeAck func(*Message) e
 // Nack negatively acknowledges a message within this group.
 // Returns a NackResult so the caller can handle DLQ if needed.
 func (g *ConsumerGroup) Nack(messageID string, requeue bool, maxRetries uint32, policy FailurePolicy) NackResult {
+	result, _ := g.nackWithHooks(messageID, requeue, maxRetries, policy, nil)
+	return result
+}
+
+func (g *ConsumerGroup) nackWithHooks(messageID string, requeue bool, maxRetries uint32, policy FailurePolicy, beforeDrop func(*Message) error) (NackResult, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	entry, ok := g.inFlight[messageID]
 	if !ok {
-		return NackResult{Found: false}
+		return NackResult{Found: false}, nil
 	}
-	delete(g.inFlight, messageID)
 	msg := entry.msg
 
 	if !requeue {
 		if policy == FailurePolicyDLQ {
-			return NackResult{Found: true, Message: msg, ToDLQ: true}
+			delete(g.inFlight, messageID)
+			return NackResult{Found: true, Message: msg, ToDLQ: true}, nil
 		}
-		return NackResult{Found: true, Message: msg, Dropped: true}
+		result := NackResult{Found: true, Message: msg, Dropped: true}
+		if beforeDrop != nil {
+			if err := beforeDrop(msg); err != nil {
+				return result, err
+			}
+		}
+		delete(g.inFlight, messageID)
+		return result, nil
 	}
 
 	// Check max retries
 	if policy != FailurePolicyInfinite && msg.Attempt >= maxRetries {
 		switch policy {
 		case FailurePolicyDLQ:
-			return NackResult{Found: true, Message: msg, ToDLQ: true}
+			delete(g.inFlight, messageID)
+			return NackResult{Found: true, Message: msg, ToDLQ: true}, nil
 		case FailurePolicyDrop:
-			return NackResult{Found: true, Message: msg, Dropped: true}
+			result := NackResult{Found: true, Message: msg, Dropped: true}
+			if beforeDrop != nil {
+				if err := beforeDrop(msg); err != nil {
+					return result, err
+				}
+			}
+			delete(g.inFlight, messageID)
+			return result, nil
 		}
 	}
 
+	delete(g.inFlight, messageID)
 	msg.VisibleAt = time.Now()
 	g.messages = append(g.messages, msg)
 	g.tryDeliver()
-	return NackResult{Found: true, Message: msg, ToDLQ: false}
+	return NackResult{Found: true, Message: msg, ToDLQ: false}, nil
 }
 
 // Heartbeat updates the last heartbeat time for a member.
