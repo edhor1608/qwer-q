@@ -167,12 +167,15 @@ func (h *Handler) handleQueueInfo(w http.ResponseWriter, _ *http.Request, name s
 }
 
 func (h *Handler) handleQueuePurge(w http.ResponseWriter, _ *http.Request, name string) {
-	q := h.broker.GetQueue(name)
-	if q == nil {
+	if h.broker.GetQueue(name) == nil {
 		writeError(w, http.StatusNotFound, "queue not found")
 		return
 	}
-	count := q.Purge()
+	count, err := h.broker.PurgeQueue(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]int{"purged": count})
 }
 
@@ -216,41 +219,25 @@ func (h *Handler) handleDLQList(w http.ResponseWriter, r *http.Request, name str
 }
 
 func (h *Handler) handleDLQRetry(w http.ResponseWriter, _ *http.Request, name string) {
-	dlqName := broker.DLQName(name)
-	dlq := h.broker.GetQueue(dlqName)
-	if dlq == nil || dlq.Len() == 0 {
-		writeJSON(w, http.StatusOK, map[string]int{"retried": 0})
+	retried, err := h.broker.RetryDLQ(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	// Move all DLQ messages back to the original queue (copy to avoid mutating originals)
-	msgs := dlq.Peek(dlq.Len())
-	q := h.broker.GetOrCreateQueue(name)
-	retried := 0
-	for _, msg := range msgs {
-		copy := *msg
-		copy.Queue = name
-		copy.Attempt = 0
-		copy.VisibleAt = time.Now()
-		if err := q.Enqueue(&copy); err == nil {
-			retried++
-		}
-	}
-	// Only purge DLQ if all messages were successfully moved
-	if retried == len(msgs) {
-		dlq.Purge()
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"retried": retried})
 }
 
 func (h *Handler) handleDLQPurge(w http.ResponseWriter, _ *http.Request, name string) {
 	dlqName := broker.DLQName(name)
-	dlq := h.broker.GetQueue(dlqName)
-	if dlq == nil {
+	if h.broker.GetQueue(dlqName) == nil {
 		writeJSON(w, http.StatusOK, map[string]int{"purged": 0})
 		return
 	}
-	count := dlq.Purge()
+	count, err := h.broker.PurgeQueue(dlqName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]int{"purged": count})
 }
 

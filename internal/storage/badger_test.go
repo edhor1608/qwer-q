@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -98,6 +99,51 @@ func TestBadgerStorage_DeleteMessage(t *testing.T) {
 	}
 	if len(messages) != 0 {
 		t.Fatalf("expected 0 messages after delete, got %d", len(messages))
+	}
+}
+
+func TestBadgerStorage_DeleteQueueMessages(t *testing.T) {
+	dir, err := os.MkdirTemp("", "badger-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	s, err := NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	for i := 0; i < 1200; i++ {
+		if err := s.SaveMessage(&Message{
+			ID:      fmt.Sprintf("msg-%04d", i),
+			Queue:   "delete-queue",
+			Payload: []byte("delete"),
+		}); err != nil {
+			t.Fatalf("SaveMessage failed: %v", err)
+		}
+	}
+	if err := s.SaveMessage(&Message{ID: "keep", Queue: "delete-queue-other", Payload: []byte("keep")}); err != nil {
+		t.Fatalf("SaveMessage failed: %v", err)
+	}
+
+	if err := s.DeleteQueueMessages("delete-queue"); err != nil {
+		t.Fatalf("DeleteQueueMessages failed: %v", err)
+	}
+	messages, err := s.LoadMessages("delete-queue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("expected 0 messages after queue delete, got %d", len(messages))
+	}
+	kept, err := s.LoadMessages("delete-queue-other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 1 {
+		t.Fatalf("expected unrelated queue message to remain, got %d", len(kept))
 	}
 }
 

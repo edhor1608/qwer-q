@@ -16,18 +16,36 @@ This benchmark suite was built to:
 
 ## Quick Start
 
+The benchmark suite is a separate Go module under `bench/`. Competitor queue
+client dependencies live in this module so the root broker module stays focused
+on the shipped QWER-Q binary and normal tests.
+
 ```bash
 # Start all queue systems
 docker compose -f bench/docker-compose.yml up -d
 
 # Run stress tests
-go run bench/cmd/stress/main.go --queues=qwerq,nats,kafka --duration=30s
+cd bench
+go run ./cmd/stress --queues=qwerq,nats,kafka --duration=30s
 
 # Run the first product-shaped benchmark
-go run bench/cmd/bench/main.go --queue qwerq --scenario queue-core --duration 5s
+go run ./cmd/bench --queue qwerq --scenario queue-core --duration 5s
 
 # Run weakness-finding tests
-go run bench/cmd/weakness/main.go --queues=qwerq --skip-docker
+go run ./cmd/weakness --queues=qwerq --skip-docker
+```
+
+From the repository root:
+
+```bash
+# Validate broker module only
+go test ./...
+
+# Validate benchmark module only
+make bench-test
+
+# Run QWER-Q-only benchmark scenarios against a fresh Docker Compose broker
+make bench
 ```
 
 ## Architecture
@@ -81,9 +99,10 @@ The benchmark suite now includes three product-shaped scenarios:
 Run them with:
 
 ```bash
-go run bench/cmd/bench/main.go --queue qwerq --scenario queue-core
-go run bench/cmd/bench/main.go --queue qwerq --scenario typed-queue
-go run bench/cmd/bench/main.go --queue qwerq --scenario operator-core
+cd bench
+go run ./cmd/bench --queue qwerq --scenario queue-core
+go run ./cmd/bench --queue qwerq --scenario typed-queue
+go run ./cmd/bench --queue qwerq --scenario operator-core
 ```
 
 These are the executable first-pass scoreboards from `docs/plans/2026-04-13-benchmark-charter.md`.
@@ -121,26 +140,28 @@ All systems run with:
 ## Running Specific Tests
 
 ```bash
+cd bench
+
 # Compare QWER-Q vs Kafka only
-go run bench/cmd/stress/main.go --queues=qwerq,kafka --tests=sustained
+go run ./cmd/stress --queues=qwerq,kafka --tests=sustained
 
 # Test burst handling
-go run bench/cmd/stress/main.go --queues=qwerq,nats --tests=burst
+go run ./cmd/stress --queues=qwerq,nats --tests=burst
 
 # Test message sizes
-go run bench/cmd/stress/main.go --queues=qwerq,kafka --tests=sizes
+go run ./cmd/stress --queues=qwerq,kafka --tests=sizes
 
 # Run queue-core against one system
-go run bench/cmd/bench/main.go --queue qwerq --scenario queue-core
+go run ./cmd/bench --queue qwerq --scenario queue-core
 
 # Run typed-queue against one system
-go run bench/cmd/bench/main.go --queue qwerq --scenario typed-queue
+go run ./cmd/bench --queue qwerq --scenario typed-queue
 
 # Run operator-core against one system
-go run bench/cmd/bench/main.go --queue qwerq --scenario operator-core
+go run ./cmd/bench --queue qwerq --scenario operator-core
 
 # Run all tests for 60 seconds each
-go run bench/cmd/stress/main.go --duration=60s --tests=all
+go run ./cmd/stress --duration=60s --tests=all
 ```
 
 ## What We Learned
