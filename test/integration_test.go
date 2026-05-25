@@ -176,6 +176,22 @@ func receiveMessageWithTimeout(t *testing.T, conn net.Conn, timeout time.Duratio
 	return &msg, true
 }
 
+func waitForMessageID(t *testing.T, conn net.Conn, messageID string, timeout time.Duration) *protocol.Message {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		msg, ok := receiveMessageWithTimeout(t, conn, 200*time.Millisecond)
+		if !ok {
+			continue
+		}
+		if msg.MessageId == messageID {
+			return msg
+		}
+	}
+	t.Fatalf("timed out waiting for message %s", messageID)
+	return nil
+}
+
 // ack sends an AckRequest for the given message ID.
 func ack(t *testing.T, conn net.Conn, messageID string) {
 	t.Helper()
@@ -328,6 +344,86 @@ func TestAckedMessageDoesNotRecoverAfterBrokerRestart(t *testing.T) {
 	subscribe(t, restartedConn, "restart-acked", 30)
 	if msg, ok := receiveMessageWithTimeout(t, restartedConn, 200*time.Millisecond); ok {
 		t.Fatalf("acked message recovered after restart: %s", msg.MessageId)
+	}
+}
+
+func TestNackedRequeueMessageSurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "restart-nack", []byte("retry me"))
+	subscribe(t, conn, "restart-nack", 30)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	nack(t, conn, msg.MessageId, true)
+	conn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "restart-nack", 30)
+	recovered := receiveMessage(t, restartedConn)
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected requeued message %s, got %s", msgID, recovered.MessageId)
+	}
+}
+
+func TestInFlightMessageSurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "restart-inflight", []byte("not acked"))
+	subscribe(t, conn, "restart-inflight", 30)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	conn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "restart-inflight", 30)
+	recovered := receiveMessage(t, restartedConn)
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected in-flight message %s after restart, got %s", msgID, recovered.MessageId)
+	}
+}
+
+func TestVisibilityTimeoutRedeliverySurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "restart-visibility", []byte("timeout retry"))
+	subscribe(t, conn, "restart-visibility", 1)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	waitForMessageID(t, conn, msgID, 5*time.Second)
+	conn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "restart-visibility", 30)
+	recovered := receiveMessage(t, restartedConn)
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected visibility message %s after restart, got %s", msgID, recovered.MessageId)
 	}
 }
 
