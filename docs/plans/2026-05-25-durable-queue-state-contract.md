@@ -54,7 +54,7 @@ Contract:
 
 Current implementation notes:
 
-- Queue config persistence errors are currently ignored when queues are created.
+- Queue-mode publish fails when auto-created queue metadata cannot be persisted.
 
 ### In-flight
 

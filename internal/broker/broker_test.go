@@ -448,6 +448,24 @@ func TestBrokerDropPolicyNackDoesNotRecoverAfterRestart(t *testing.T) {
 	}
 }
 
+func TestBrokerPublishFailsWhenQueueMetadataSaveFails(t *testing.T) {
+	saveQueueErr := errors.New("save queue failed")
+	store := &retryDLQFailingStorage{saveQueueErr: saveQueueErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "metadata-fail",
+		Payload: []byte("data"),
+	})
+	if !errors.Is(err, saveQueueErr) {
+		t.Fatalf("expected queue metadata error, got %v", err)
+	}
+	if q := b.GetQueue("metadata-fail"); q != nil {
+		t.Fatal("expected queue not to exist after metadata save failure")
+	}
+}
+
 func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
 	saveErr := errors.New("save failed")
 	store := &retryDLQFailingStorage{saveErr: saveErr}
@@ -693,6 +711,7 @@ func TestBrokerPurgeQueueDoesNotPurgeRuntimeWhenStorageFails(t *testing.T) {
 
 type retryDLQFailingStorage struct {
 	saveErr           error
+	saveQueueErr      error
 	deleteDLQErr      error
 	deleteDLQFailAt   int
 	deleteDLQCalls    int
@@ -737,7 +756,7 @@ func (s *retryDLQFailingStorage) LoadMessages(_ string) ([]*storage.Message, err
 }
 
 func (s *retryDLQFailingStorage) SaveQueue(_ string, _ storage.QueueConfig) error {
-	return nil
+	return s.saveQueueErr
 }
 
 func (s *retryDLQFailingStorage) LoadQueues() (map[string]storage.QueueConfig, error) {

@@ -49,7 +49,10 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 		OrderingKey: req.GetOrderingKey(),
 	}
 
-	q := b.GetOrCreateQueue(req.GetQueue())
+	q, err := b.GetOrCreateQueueWithError(req.GetQueue())
+	if err != nil {
+		return nil, err
+	}
 	if b.storage != nil {
 		if err := b.storage.SaveMessage(msg); err != nil {
 			return nil, err

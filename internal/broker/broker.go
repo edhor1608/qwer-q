@@ -227,28 +227,36 @@ func (b *Broker) LoadFromStorage() error {
 
 // GetOrCreateQueue returns the queue with the given name, creating it if needed.
 func (b *Broker) GetOrCreateQueue(name string) *Queue {
+	q, _ := b.GetOrCreateQueueWithError(name)
+	return q
+}
+
+// GetOrCreateQueueWithError returns the queue with the given name, creating it if needed.
+func (b *Broker) GetOrCreateQueueWithError(name string) (*Queue, error) {
 	b.mu.RLock()
 	q, ok := b.queues[name]
 	b.mu.RUnlock()
 	if ok {
-		return q
+		return q, nil
 	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	// Double-check after acquiring write lock
 	if q, ok = b.queues[name]; ok {
-		return q
+		return q, nil
 	}
 	q = NewQueue(name)
-	b.queues[name] = q
 
 	// Persist queue config for recovery
 	if b.storage != nil {
-		b.storage.SaveQueue(name, storage.QueueConfig{})
+		if err := b.storage.SaveQueue(name, storage.QueueConfig{}); err != nil {
+			return nil, err
+		}
 	}
+	b.queues[name] = q
 
-	return q
+	return q, nil
 }
 
 // GetOrCreateStreamQueue returns the stream queue with the given name, creating it if needed.
