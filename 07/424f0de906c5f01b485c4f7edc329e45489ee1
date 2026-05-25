@@ -1,0 +1,23 @@
+docs/plans/2026-05-25-durable-queue-state-contract.md
+  s_2efdd75b4a3d60::t_6fe994b396e283 274-276
+  s_2efdd75b4a3d60::t_ffdfd55cc362da 190,208-209,250-251
+docs/plans/decisions-log.md
+  s_2efdd75b4a3d60::t_5d17bed305de55 951,956,966,974,985
+  s_2efdd75b4a3d60::t_f477fa70f4a41d 947-950,952-955,957-965,967-973,975-984,986-992
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "07424f0de906c5f01b485c4f7edc329e45489ee1",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
