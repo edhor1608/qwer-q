@@ -30,6 +30,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+.DS_Store
+.playwright-mcp/
+.claude/settings.local.json
 
 # Build output
 bin/
