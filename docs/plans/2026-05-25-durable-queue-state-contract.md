@@ -80,14 +80,16 @@ An acked message has been successfully processed by a consumer.
 
 Contract:
 
-- Ack removes the message from runtime state.
 - Ack removes the message from durable storage.
+- Ack removes the message from runtime state only after durable deletion
+  succeeds.
+- If durable deletion fails, ack fails and the message remains in-flight for the
+  current broker process.
 - An acked message must not reappear after restart.
 
 Current implementation notes:
 
-- Ack deletes from storage after the queue or group ack succeeds.
-- Storage delete errors are not surfaced by the broker ack result today.
+- Ack returns storage deletion errors to the server boundary.
 
 ### Nacked With Requeue
 

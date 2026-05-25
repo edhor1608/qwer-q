@@ -354,7 +354,11 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 
 	// Ack
 	ackReq := &protocol.AckRequest{MessageId: msgID}
-	if !b.HandleAck(ackReq, "ack-queue", "") {
+	ok, err := b.HandleAck(ackReq, "ack-queue", "")
+	if err != nil {
+		t.Fatalf("ack failed: %v", err)
+	}
+	if !ok {
 		t.Fatal("ack failed")
 	}
 
@@ -362,6 +366,36 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 	messages, _ := store.LoadMessages("ack-queue")
 	if len(messages) != 0 {
 		t.Fatalf("expected 0 messages in storage after ack, got %d", len(messages))
+	}
+}
+
+func TestBrokerAckKeepsMessageInFlightWhenStorageDeleteFails(t *testing.T) {
+	deleteErr := errors.New("delete failed")
+	store := &retryDLQFailingStorage{deleteRollbackErr: deleteErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "ack-delete-fail",
+		Payload: []byte("acked but not deleted"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	q := b.GetQueue("ack-delete-fail")
+	ch := q.Dequeue(30 * time.Second)
+	<-ch
+
+	ok, err := b.HandleAck(&protocol.AckRequest{MessageId: resp.MessageId}, "ack-delete-fail", "")
+	if ok {
+		t.Fatal("expected ack to fail")
+	}
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("expected delete error, got %v", err)
+	}
+	if q.InFlightLen() != 1 {
+		t.Fatalf("expected message to stay in-flight, got %d", q.InFlightLen())
 	}
 }
 

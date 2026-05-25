@@ -253,14 +253,25 @@ func (q *Queue) RemoveConsumer(ch <-chan *Message) {
 
 // Ack acknowledges a message, removing it from in-flight.
 func (q *Queue) Ack(messageID string) bool {
+	ok, _ := q.ackWithHook(messageID, nil)
+	return ok
+}
+
+func (q *Queue) ackWithHook(messageID string, beforeAck func(*Message) error) (bool, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if _, ok := q.inFlight[messageID]; ok {
-		delete(q.inFlight, messageID)
-		q.tryDeliver() // Deliver next message now that channel has space
-		return true
+	msg, ok := q.inFlight[messageID]
+	if !ok {
+		return false, nil
 	}
-	return false
+	if beforeAck != nil {
+		if err := beforeAck(msg); err != nil {
+			return false, err
+		}
+	}
+	delete(q.inFlight, messageID)
+	q.tryDeliver() // Deliver next message now that channel has space
+	return true, nil
 }
 
 // NackResult indicates what happened to a nacked message.

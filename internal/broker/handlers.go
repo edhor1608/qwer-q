@@ -88,30 +88,28 @@ func (b *Broker) HandleConsume(req *protocol.ConsumeRequest, memberID string) <-
 
 // HandleAck processes an ack request.
 // If groupName is non-empty, ack within that group instead of the queue's ungrouped consumers.
-func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string) bool {
+func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string) (bool, error) {
 	q := b.GetQueue(queueName)
 	if q == nil {
-		return false
+		return false, nil
+	}
+
+	deleteStored := func(*Message) error {
+		if b.storage == nil {
+			return nil
+		}
+		return b.storage.DeleteMessage(queueName, req.GetMessageId())
 	}
 
 	if groupName != "" {
 		g := q.GetGroup(groupName)
 		if g == nil {
-			return false
+			return false, nil
 		}
-		if !g.Ack(req.GetMessageId()) {
-			return false
-		}
-	} else {
-		if !q.Ack(req.GetMessageId()) {
-			return false
-		}
+		return g.ackWithHook(req.GetMessageId(), deleteStored)
 	}
 
-	if b.storage != nil {
-		b.storage.DeleteMessage(queueName, req.GetMessageId())
-	}
-	return true
+	return q.ackWithHook(req.GetMessageId(), deleteStored)
 }
 
 // HandleNack processes a nack request.
