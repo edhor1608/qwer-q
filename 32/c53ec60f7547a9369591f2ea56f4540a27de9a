@@ -1,13 +1,10 @@
-Makefile
-  s_2efdd75b4a3d60::t_270738ad5e1a3e 1,37,39,44,50
-  s_2efdd75b4a3d60::t_47684477b6c69a 38
-bench/README.md
-  s_2efdd75b4a3d60::t_ba4e16c35b1f51 19-22,28-29,32,35-48,102-105,143-144,146,149,152,155,158,161,164
+docs/plans/2026-05-25-linear-project-navigation.md
+  s_2efdd75b4a3d60::t_4929e472b872d7 1-60
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.5.0",
-  "base_commit_sha": "760624858e9a7e374b61885d9bde11ba2f9a1de0",
+  "base_commit_sha": "32c53ec60f7547a9369591f2ea56f4540a27de9a",
   "prompts": {},
   "sessions": {
     "s_2efdd75b4a3d60": {
