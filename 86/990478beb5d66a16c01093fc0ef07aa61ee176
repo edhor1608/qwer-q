@@ -1,12 +1,5 @@
-internal/broker/dlq.go
-  s_2efdd75b4a3d60::t_66a1ae67cd51c5 3-4,32-40,42-43,45-67,69-71,74-80
-  s_2efdd75b4a3d60::t_cdea7b055b5bc0 72-73
-internal/storage/storage.go
-  s_2efdd75b4a3d60::t_ffc2b927d10985 38
 internal/api/api.go
   s_2efdd75b4a3d60::t_4e7c9eff4d7cc5 170,174-178,222-224,232,236-238
-internal/broker/broker_test.go
-  s_2efdd75b4a3d60::t_826afaad8c5fe2 4,367-395,397-418,445-447,452-453,464-465,472-474,476-491
 test/integration_test.go
   s_2efdd75b4a3d60::t_825766a5d8764f 6-7,13,59,61-69,71,347,351,353,356,361-362,374,378,380,382,387-388,400,404,406,413,418-419,431,435,437,439-440,445-446,455,457-458,460-462,464,466-468,470,475-476,478-481,484,488,490-491,493-494,496,501-502,504-506,510,512-513,515-517,519,521-523,525,530-531,533-535
   s_2efdd75b4a3d60::t_d5b312057eef97 16,38-51,53-55,57-58,293-304,306-313
@@ -17,8 +10,17 @@ test/integration_test.go
   s_2efdd75b4a3d60::t_e855bebb57feb2 203-217,314-340
   s_2efdd75b4a3d60::t_16a8f93e305ff9 305
   s_2efdd75b4a3d60::t_074b7d90e17e37 344,349-350,355,364,367,371,376-377,390,393,397,402-403,408-411,421,424
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_826afaad8c5fe2 4,367-395,397-418,445-447
+  s_2efdd75b4a3d60::t_270caa41a58a07 396,419-444,448-451,454-463,466-471,475
+internal/broker/dlq.go
+  s_2efdd75b4a3d60::t_66a1ae67cd51c5 3-4,32-40,42-43,45-67,69-71,74-80
+  s_2efdd75b4a3d60::t_a17ef7fc0accf1 41,44,68
+  s_2efdd75b4a3d60::t_cdea7b055b5bc0 72-73
 internal/storage/badger.go
   s_2efdd75b4a3d60::t_dfb95f6d5efaf4 158-181
+internal/storage/storage.go
+  s_2efdd75b4a3d60::t_ffc2b927d10985 38
 ---
 {
   "schema_version": "authorship/3.0.0",
