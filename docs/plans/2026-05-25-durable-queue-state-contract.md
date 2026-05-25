@@ -187,6 +187,7 @@ Current implementation notes:
 ## Consumer Groups
 
 Consumer groups are runtime delivery coordination, not durable subscriptions.
+This is an explicit product decision in DEC-035.
 
 Contract:
 
@@ -204,6 +205,8 @@ Current implementation notes:
 - Group delivery fan-out is not persisted as separate durable group work.
 - Group ack currently deletes the underlying stored queue message, so queue-mode
   groups should not be treated as durable independent subscriptions.
+- Durable independent subscriptions require a separate product PRD before
+  implementation.
 
 ## Ordering Keys
 
@@ -244,8 +247,8 @@ them into failing behavior tests before implementation changes:
 3. Queue purge and DLQ purge do not delete durable message state.
 4. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.
-5. Queue-mode consumer groups are runtime coordination only; durable independent
-   group subscriptions are not implemented.
+5. Queue-mode consumer groups are runtime coordination only by decision
+   (DEC-035); durable independent group subscriptions are not implemented.
 
 ## Test Contract
 
@@ -268,8 +271,9 @@ Required behavior coverage:
 ## Out Of Scope
 
 - Exactly-once delivery.
-- Durable connected consumers.
-- Durable consumer group membership.
+- Connected consumers as durable identities.
+- Consumer group membership as durable state.
+- Queue-mode group subscriptions as durable ledgers.
 - Stream-mode replay and offsets.
 - Raft clustering semantics.
 - Replacing BadgerDB.
