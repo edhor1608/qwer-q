@@ -1,0 +1,36 @@
+internal/broker/dlq.go
+  s_2efdd75b4a3d60::t_66a1ae67cd51c5 3-4,32-71,74-80
+  s_2efdd75b4a3d60::t_cdea7b055b5bc0 72-73
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_826afaad8c5fe2 4,367-451
+internal/api/api.go
+  s_2efdd75b4a3d60::t_4e7c9eff4d7cc5 170,174-178,222-224,232,236-238
+internal/storage/badger.go
+  s_2efdd75b4a3d60::t_dfb95f6d5efaf4 158-181
+internal/storage/storage.go
+  s_2efdd75b4a3d60::t_ffc2b927d10985 38
+test/integration_test.go
+  s_2efdd75b4a3d60::t_825766a5d8764f 6-7,13,59-73,452-535
+  s_2efdd75b4a3d60::t_d5b312057eef97 16,38-51,53-55,57-58,293-304,306-313
+  s_2efdd75b4a3d60::t_e855bebb57feb2 203-217,314-340
+  s_2efdd75b4a3d60::t_62683f2d5f61ff 218-220
+  s_2efdd75b4a3d60::t_16a8f93e305ff9 305
+  s_2efdd75b4a3d60::t_074b7d90e17e37 344-427
+  s_2efdd75b4a3d60::t_aa9683ad94a546 428-451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "eb9c5519747626fc9218693fb6edf5cff21b4fa6",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
