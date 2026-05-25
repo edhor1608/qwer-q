@@ -1,0 +1,24 @@
+test/integration_test.go
+  s_2efdd75b4a3d60::t_d5b312057eef97 13,35-48,58-59,283-294,296-303
+  s_2efdd75b4a3d60::t_69236453950321 50,57
+  s_2efdd75b4a3d60::t_7e4d486fdac10b 141,143,208,210,331,333
+  s_2efdd75b4a3d60::t_aa9683ad94a546 142,209,332
+  s_2efdd75b4a3d60::t_e855bebb57feb2 189-203,304-330
+  s_2efdd75b4a3d60::t_16a8f93e305ff9 295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "549e5d6ee8644e0feb08d7dee1eca4c84894f351",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
