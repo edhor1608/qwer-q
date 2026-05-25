@@ -234,6 +234,41 @@ func TestBadgerStorage_QueueConfig(t *testing.T) {
 	s.Close()
 }
 
+func TestBadgerStorage_QueueConfigExplicitZeroMaxSize(t *testing.T) {
+	dir, err := os.MkdirTemp("", "badger-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	s, err := NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	cfg := QueueConfig{
+		MaxSize:    0,
+		MaxSizeSet: true,
+	}
+	if err := s.SaveQueue("unlimited", cfg); err != nil {
+		t.Fatalf("SaveQueue failed: %v", err)
+	}
+
+	queues, err := s.LoadQueues()
+	if err != nil {
+		t.Fatalf("LoadQueues failed: %v", err)
+	}
+
+	loaded := queues["unlimited"]
+	if !loaded.MaxSizeSet {
+		t.Fatal("expected explicit max size flag to survive storage round trip")
+	}
+	if loaded.MaxSize != 0 {
+		t.Fatalf("expected explicit unlimited max size 0, got %d", loaded.MaxSize)
+	}
+}
+
 func TestBadgerStorage_CrashRecovery(t *testing.T) {
 	dir, err := os.MkdirTemp("", "badger-test-*")
 	if err != nil {
