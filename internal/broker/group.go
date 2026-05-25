@@ -194,7 +194,7 @@ func (g *ConsumerGroup) Nack(messageID string, requeue bool, maxRetries uint32, 
 		if policy == FailurePolicyDLQ {
 			return NackResult{Found: true, Message: msg, ToDLQ: true}
 		}
-		return NackResult{Found: true, Message: msg, ToDLQ: false}
+		return NackResult{Found: true, Message: msg, Dropped: true}
 	}
 
 	// Check max retries
@@ -203,7 +203,7 @@ func (g *ConsumerGroup) Nack(messageID string, requeue bool, maxRetries uint32, 
 		case FailurePolicyDLQ:
 			return NackResult{Found: true, Message: msg, ToDLQ: true}
 		case FailurePolicyDrop:
-			return NackResult{Found: true, Message: msg, ToDLQ: false}
+			return NackResult{Found: true, Message: msg, Dropped: true}
 		}
 	}
 

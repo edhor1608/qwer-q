@@ -399,6 +399,55 @@ func TestBrokerAckKeepsMessageInFlightWhenStorageDeleteFails(t *testing.T) {
 	}
 }
 
+func TestBrokerDropPolicyNackDoesNotRecoverAfterRestart(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-drop-nack-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("drop-queue", storage.QueueConfig{FailurePolicy: string(FailurePolicyDrop)}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	q := b.GetOrCreateQueue("drop-queue")
+	q.SetFailurePolicy(FailurePolicyDrop)
+
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "drop-queue",
+		Payload: []byte("drop me"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ch := q.Dequeue(30 * time.Second)
+	<-ch
+	if !b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: false}, "drop-queue", "") {
+		t.Fatal("nack failed")
+	}
+	b.Close()
+
+	store2, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatalf("reopen storage: %v", err)
+	}
+	b2 := NewBroker(WithStorage(store2))
+	defer b2.Close()
+	if err := b2.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	if recovered := b2.GetQueue("drop-queue"); recovered != nil && recovered.Len() != 0 {
+		t.Fatalf("expected dropped message not to recover, got %d messages", recovered.Len())
+	}
+}
+
 func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
 	saveErr := errors.New("save failed")
 	store := &retryDLQFailingStorage{saveErr: saveErr}

@@ -140,6 +140,9 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 				b.storage.SaveMessage(result.Message)
 			}
 		}
+		if result.Dropped && b.storage != nil {
+			b.storage.DeleteMessage(queueName, req.GetMessageId())
+		}
 		return true
 	}
 
@@ -162,6 +165,9 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 			// Save to DLQ storage
 			b.storage.SaveMessage(result.Message)
 		}
+	}
+	if result.Dropped && b.storage != nil {
+		b.storage.DeleteMessage(queueName, req.GetMessageId())
 	}
 
 	return true

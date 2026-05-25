@@ -123,6 +123,7 @@ Current implementation notes:
 
 - DLQ movement deletes the original queue storage entry and saves the message
   under the DLQ name.
+- Drop-policy terminal nack outcomes delete the original queue storage entry.
 - Non-DLQ terminal outcomes can leave the original stored message behind today,
   which can make dropped messages reappear after restart.
 

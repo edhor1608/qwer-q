@@ -279,6 +279,7 @@ type NackResult struct {
 	Found   bool     // Was the message found?
 	Message *Message // The message (for DLQ handling)
 	ToDLQ   bool     // Should message go to DLQ?
+	Dropped bool     // Was message terminally dropped?
 }
 
 // Nack negatively acknowledges a message.
@@ -299,7 +300,7 @@ func (q *Queue) Nack(messageID string, requeue bool) NackResult {
 		if q.failurePolicy == FailurePolicyDLQ {
 			return NackResult{Found: true, Message: msg, ToDLQ: true}
 		}
-		return NackResult{Found: true, Message: msg, ToDLQ: false}
+		return NackResult{Found: true, Message: msg, Dropped: true}
 	}
 
 	// Check if we've exceeded max retries
@@ -308,7 +309,7 @@ func (q *Queue) Nack(messageID string, requeue bool) NackResult {
 		case FailurePolicyDLQ:
 			return NackResult{Found: true, Message: msg, ToDLQ: true}
 		case FailurePolicyDrop:
-			return NackResult{Found: true, Message: msg, ToDLQ: false}
+			return NackResult{Found: true, Message: msg, Dropped: true}
 		}
 	}
 
