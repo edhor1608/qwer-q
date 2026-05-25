@@ -159,6 +159,15 @@ func subscribe(t *testing.T, conn net.Conn, queue string, visibilityTimeout uint
 	}
 }
 
+func subscribeGroup(t *testing.T, conn net.Conn, queue, group string, visibilityTimeout uint32) {
+	t.Helper()
+	req := &protocol.ConsumeRequest{Queue: queue, VisibilityTimeout: visibilityTimeout, Group: &group}
+	data, _ := proto.Marshal(req)
+	if _, err := conn.Write(protocol.EncodeFrame(protocol.OpConsume, data)); err != nil {
+		t.Fatalf("write group consume: %v", err)
+	}
+}
+
 // receiveMessage reads the next OpMessage from the connection.
 func receiveMessage(t *testing.T, conn net.Conn) *protocol.Message {
 	t.Helper()
@@ -239,6 +248,19 @@ func queueListRoundTrip(t *testing.T, conn net.Conn) {
 	var resp protocol.QueueListResponse
 	if err := proto.Unmarshal(frame.Payload, &resp); err != nil {
 		t.Fatalf("unmarshal queue list response: %v", err)
+	}
+}
+
+func heartbeatRoundTrip(t *testing.T, conn net.Conn, queue, group string) {
+	t.Helper()
+	req := &protocol.HeartbeatRequest{Queue: queue, Group: group}
+	data, _ := proto.Marshal(req)
+	if _, err := conn.Write(protocol.EncodeFrame(protocol.OpHeartbeat, data)); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	frame := readFrame(t, conn)
+	if frame.OpCode != protocol.OpHeartbeatAck {
+		t.Fatalf("expected OpHeartbeatAck, got %v", frame.OpCode)
 	}
 }
 
@@ -553,6 +575,44 @@ func TestDLQPurgeSurvivesBrokerRestart(t *testing.T) {
 	subscribe(t, restartedConn, "purge-dlq.dlq", 30)
 	if msg, ok := receiveMessageWithTimeout(t, restartedConn, 200*time.Millisecond); ok {
 		t.Fatalf("purged DLQ message recovered after restart: got %s, want not %s", msg.MessageId, msgID)
+	}
+}
+
+func TestConsumerGroupMembershipIsEphemeralAcrossBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	groupConn := dial(t, addr)
+	producerConn := dial(t, addr)
+
+	subscribeGroup(t, groupConn, "restart-group", "workers", 30)
+	heartbeatRoundTrip(t, groupConn, "restart-group", "workers")
+	msgID := publish(t, producerConn, "restart-group", []byte("group work"))
+	msg := receiveMessage(t, groupConn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected group message %s, got %s", msgID, msg.MessageId)
+	}
+	groupConn.Close()
+	producerConn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedGroupConn := dial(t, restartedAddr)
+	defer restartedGroupConn.Close()
+
+	// Group membership is ephemeral, so a fresh group subscriber does not inherit
+	// earlier pending deliveries after restart.
+	subscribeGroup(t, restartedGroupConn, "restart-group", "workers", 30)
+	if msg, ok := receiveMessageWithTimeout(t, restartedGroupConn, 200*time.Millisecond); ok {
+		t.Fatalf("ephemeral group membership recovered message after restart: %s", msg.MessageId)
+	}
+
+	restartedQueueConn := dial(t, restartedAddr)
+	defer restartedQueueConn.Close()
+	subscribe(t, restartedQueueConn, "restart-group", 30)
+	recovered := receiveMessage(t, restartedQueueConn)
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected durable queue message %s after restart, got %s", msgID, recovered.MessageId)
 	}
 }
 
