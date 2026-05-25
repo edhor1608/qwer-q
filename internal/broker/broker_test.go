@@ -1,6 +1,8 @@
 package broker
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"testing"
@@ -361,6 +363,249 @@ func TestBrokerAckDeletesFromStorage(t *testing.T) {
 	if len(messages) != 0 {
 		t.Fatalf("expected 0 messages in storage after ack, got %d", len(messages))
 	}
+}
+
+func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
+	saveErr := errors.New("save failed")
+	store := &retryDLQFailingStorage{saveErr: saveErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	dlq := b.GetOrCreateQueue(DLQName("retry-fail"))
+	msg := &Message{ID: "msg-1", Queue: DLQName("retry-fail"), Payload: []byte("poison")}
+	if err := dlq.Enqueue(msg); err != nil {
+		t.Fatalf("enqueue dlq message: %v", err)
+	}
+
+	retried, err := b.RetryDLQ("retry-fail")
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("expected save error, got %v", err)
+	}
+	if retried != 0 {
+		t.Fatalf("expected 0 retried messages, got %d", retried)
+	}
+	if q := b.GetQueue("retry-fail"); q != nil && q.Len() != 0 {
+		t.Fatalf("expected original queue to stay empty, got %d messages", q.Len())
+	}
+	if dlq.Len() != 1 {
+		t.Fatalf("expected dlq message to stay retryable, got %d messages", dlq.Len())
+	}
+}
+
+func TestBrokerRetryDLQDoesNotEnqueueWhenStorageDeleteFails(t *testing.T) {
+	deleteErr := errors.New("delete failed")
+	store := &retryDLQFailingStorage{deleteDLQErr: deleteErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	dlq := b.GetOrCreateQueue(DLQName("delete-fail"))
+	msg := &Message{ID: "msg-1", Queue: DLQName("delete-fail"), Payload: []byte("poison")}
+	if err := dlq.Enqueue(msg); err != nil {
+		t.Fatalf("enqueue dlq message: %v", err)
+	}
+
+	retried, err := b.RetryDLQ("delete-fail")
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("expected delete error, got %v", err)
+	}
+	if retried != 0 {
+		t.Fatalf("expected 0 retried messages, got %d", retried)
+	}
+	if q := b.GetQueue("delete-fail"); q != nil && q.Len() != 0 {
+		t.Fatalf("expected original queue to stay empty, got %d messages", q.Len())
+	}
+	if dlq.Len() != 1 {
+		t.Fatalf("expected dlq message to stay retryable, got %d messages", dlq.Len())
+	}
+	if _, ok := store.saved["delete-fail/msg-1"]; ok {
+		t.Fatal("expected saved original message to be rolled back")
+	}
+}
+
+func TestBrokerRetryDLQReturnsRollbackError(t *testing.T) {
+	deleteErr := errors.New("delete failed")
+	rollbackErr := errors.New("rollback failed")
+	store := &retryDLQFailingStorage{deleteDLQErr: deleteErr, deleteRollbackErr: rollbackErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	dlq := b.GetOrCreateQueue(DLQName("rollback-fail"))
+	msg := &Message{ID: "msg-1", Queue: DLQName("rollback-fail"), Payload: []byte("poison")}
+	if err := dlq.Enqueue(msg); err != nil {
+		t.Fatalf("enqueue dlq message: %v", err)
+	}
+
+	retried, err := b.RetryDLQ("rollback-fail")
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("expected delete error, got %v", err)
+	}
+	if !errors.Is(err, rollbackErr) {
+		t.Fatalf("expected combined delete and rollback error, got %v", err)
+	}
+	if retried != 0 {
+		t.Fatalf("expected 0 retried messages, got %d", retried)
+	}
+}
+
+func TestBrokerRetryDLQPartialFailureDoesNotDuplicateOnRetry(t *testing.T) {
+	deleteErr := errors.New("delete failed")
+	store := &retryDLQFailingStorage{deleteDLQFailAt: 2, deleteDLQErr: deleteErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	dlq := b.GetOrCreateQueue(DLQName("partial-retry"))
+	for i := 1; i <= 3; i++ {
+		msg := &Message{ID: fmt.Sprintf("msg-%d", i), Queue: DLQName("partial-retry"), Payload: []byte("poison")}
+		if err := dlq.Enqueue(msg); err != nil {
+			t.Fatalf("enqueue dlq message %d: %v", i, err)
+		}
+	}
+
+	retried, err := b.RetryDLQ("partial-retry")
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("expected delete error, got %v", err)
+	}
+	if retried != 1 {
+		t.Fatalf("expected 1 retried message, got %d", retried)
+	}
+	q := b.GetQueue("partial-retry")
+	if q == nil || q.Len() != 1 {
+		t.Fatalf("expected original queue to contain 1 message, got %v", q)
+	}
+	if dlq.Len() != 2 {
+		t.Fatalf("expected dlq to retain 2 messages, got %d", dlq.Len())
+	}
+
+	retried, err = b.RetryDLQ("partial-retry")
+	if err != nil {
+		t.Fatalf("second retry failed: %v", err)
+	}
+	if retried != 2 {
+		t.Fatalf("expected 2 retried messages, got %d", retried)
+	}
+	if q.Len() != 3 {
+		t.Fatalf("expected original queue to contain 3 unique messages, got %d", q.Len())
+	}
+	if dlq.Len() != 0 {
+		t.Fatalf("expected empty dlq, got %d messages", dlq.Len())
+	}
+}
+
+func TestBrokerRetryDLQRollsBackStorageWhenEnqueueFails(t *testing.T) {
+	store := &retryDLQFailingStorage{}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("enqueue-fail")
+	q.SetMaxSize(1)
+	if err := q.Enqueue(&Message{ID: "existing", Queue: "enqueue-fail", Payload: []byte("full")}); err != nil {
+		t.Fatalf("enqueue existing message: %v", err)
+	}
+	dlq := b.GetOrCreateQueue(DLQName("enqueue-fail"))
+	msg := &Message{ID: "msg-1", Queue: DLQName("enqueue-fail"), Payload: []byte("poison")}
+	if err := dlq.Enqueue(msg); err != nil {
+		t.Fatalf("enqueue dlq message: %v", err)
+	}
+
+	retried, err := b.RetryDLQ("enqueue-fail")
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected queue full error, got %v", err)
+	}
+	if retried != 0 {
+		t.Fatalf("expected 0 retried messages, got %d", retried)
+	}
+	if q.Len() != 1 {
+		t.Fatalf("expected original queue to keep only existing message, got %d messages", q.Len())
+	}
+	if dlq.Len() != 1 {
+		t.Fatalf("expected dlq message to stay retryable, got %d messages", dlq.Len())
+	}
+	if _, ok := store.saved["enqueue-fail/msg-1"]; ok {
+		t.Fatal("expected original queue storage write to be rolled back")
+	}
+	if _, ok := store.saved[DLQName("enqueue-fail")+"/msg-1"]; !ok {
+		t.Fatal("expected dlq storage entry to be restored")
+	}
+}
+
+func TestBrokerPurgeQueueDoesNotPurgeRuntimeWhenStorageFails(t *testing.T) {
+	deleteErr := errors.New("delete queue failed")
+	store := &retryDLQFailingStorage{deleteQueueErr: deleteErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("purge-fail")
+	if err := q.Enqueue(&Message{ID: "msg-1", Queue: "purge-fail", Payload: []byte("keep")}); err != nil {
+		t.Fatalf("enqueue message: %v", err)
+	}
+
+	count, err := b.PurgeQueue("purge-fail")
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("expected delete queue error, got %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 purged messages, got %d", count)
+	}
+	if q.Len() != 1 {
+		t.Fatalf("expected runtime message to stay queued, got %d messages", q.Len())
+	}
+}
+
+type retryDLQFailingStorage struct {
+	saveErr           error
+	deleteDLQErr      error
+	deleteDLQFailAt   int
+	deleteDLQCalls    int
+	deleteRollbackErr error
+	deleteQueueErr    error
+	saved             map[string]*storage.Message
+}
+
+func (s *retryDLQFailingStorage) SaveMessage(msg *storage.Message) error {
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	if s.saved == nil {
+		s.saved = make(map[string]*storage.Message)
+	}
+	msgCopy := *msg
+	s.saved[msg.Queue+"/"+msg.ID] = &msgCopy
+	return nil
+}
+
+func (s *retryDLQFailingStorage) DeleteMessage(queue, id string) error {
+	if IsDLQ(queue) && s.deleteDLQErr != nil {
+		s.deleteDLQCalls++
+		if s.deleteDLQFailAt > 0 && s.deleteDLQCalls != s.deleteDLQFailAt {
+			return nil
+		}
+		return s.deleteDLQErr
+	}
+	if !IsDLQ(queue) && s.deleteRollbackErr != nil {
+		return s.deleteRollbackErr
+	}
+	delete(s.saved, queue+"/"+id)
+	return nil
+}
+
+func (s *retryDLQFailingStorage) DeleteQueueMessages(_ string) error {
+	return s.deleteQueueErr
+}
+
+func (s *retryDLQFailingStorage) LoadMessages(_ string) ([]*storage.Message, error) {
+	return nil, nil
+}
+
+func (s *retryDLQFailingStorage) SaveQueue(_ string, _ storage.QueueConfig) error {
+	return nil
+}
+
+func (s *retryDLQFailingStorage) LoadQueues() (map[string]storage.QueueConfig, error) {
+	return nil, nil
+}
+
+func (s *retryDLQFailingStorage) Close() error {
+	return nil
 }
 
 func TestQueueBackpressure(t *testing.T) {

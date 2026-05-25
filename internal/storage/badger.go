@@ -155,6 +155,41 @@ func (s *BadgerStorage) DeleteMessage(queue, id string) error {
 	})
 }
 
+// DeleteQueueMessages removes all messages for a queue.
+func (s *BadgerStorage) DeleteQueueMessages(queue string) error {
+	const deleteBatchSize = 500
+	prefix := []byte(msgPrefix + queue + ":")
+
+	for {
+		keys := make([][]byte, 0, deleteBatchSize)
+		if err := s.db.View(func(txn *badger.Txn) error {
+			opts := badger.DefaultIteratorOptions
+			opts.PrefetchValues = false
+			it := txn.NewIterator(opts)
+			defer it.Close()
+			for it.Seek(prefix); it.ValidForPrefix(prefix) && len(keys) < deleteBatchSize; it.Next() {
+				keys = append(keys, it.Item().KeyCopy(nil))
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if len(keys) == 0 {
+			return nil
+		}
+		if err := s.db.Update(func(txn *badger.Txn) error {
+			for _, key := range keys {
+				if err := txn.Delete(key); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+}
+
 // LoadMessages loads all messages for a queue.
 func (s *BadgerStorage) LoadMessages(queue string) ([]*Message, error) {
 	var messages []*Message

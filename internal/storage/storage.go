@@ -35,6 +35,7 @@ type StreamMessage struct {
 type Storage interface {
 	SaveMessage(msg *Message) error
 	DeleteMessage(queue, id string) error
+	DeleteQueueMessages(queue string) error
 	LoadMessages(queue string) ([]*Message, error)
 	SaveQueue(name string, config QueueConfig) error
 	LoadQueues() (map[string]QueueConfig, error)
