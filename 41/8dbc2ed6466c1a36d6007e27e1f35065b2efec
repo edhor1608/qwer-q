@@ -1,9 +1,3 @@
-go.mod
-  s_2efdd75b4a3d60::t_e39d76217ac974 3
-  s_2efdd75b4a3d60::t_3bfbf205bba2dc 12,51
-  s_2efdd75b4a3d60::t_46c9ac0a831701 21,39,43
-bench/go.sum
-  ai_agent 1-296
 bench/go.mod
   s_2efdd75b4a3d60::t_2e6fef229bfac5 1-2,4,71-72
   s_2efdd75b4a3d60::t_c18657bf8df397 3
@@ -11,6 +5,12 @@ bench/go.mod
   s_2efdd75b4a3d60::t_3bfbf205bba2dc 7,55-57,59-60
 go.sum
   ai_agent 208-209,233-234
+bench/go.sum
+  ai_agent 1-296
+go.mod
+  s_2efdd75b4a3d60::t_e39d76217ac974 3
+  s_2efdd75b4a3d60::t_3bfbf205bba2dc 12,51
+  s_2efdd75b4a3d60::t_46c9ac0a831701 21,39,43
 ---
 {
   "schema_version": "authorship/3.0.0",
