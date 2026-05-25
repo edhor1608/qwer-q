@@ -944,3 +944,49 @@ Implement the first product-shaped suite as a `queue-core` benchmark inside `ben
 - Raw throughput alone is no longer the primary product benchmark
 - Benchmarks must state guarantees and competitor class clearly
 - Optimization wins that do not improve product-shaped benchmarks should not drive roadmap direction
+
+---
+
+## DEC-035: Queue-Mode Consumer Groups Are Runtime Coordination
+
+**Date:** 2026-05-25
+**Status:** Decided
+
+### Context
+
+Queue-mode consumer groups currently fan out each published message to every
+connected group, then distribute that group's copy across connected members.
+That runtime behavior is useful for live work coordination, but persisting
+named group subscriptions would add a second durable work ledger per group.
+
+The existing product direction is queue-first rather than stream-first, and
+DEC-003 kept consumer coordination small for the core queue model.
+
+### Decision
+
+Keep queue-mode consumer groups as runtime delivery coordination only.
+
+Durable independent subscriptions are not in scope for the current queue-mode
+contract. If users need durable named replay positions, they should use stream
+mode offsets or a future durable-subscription PRD.
+
+### Rationale
+
+- Preserves the simple queue-first storage model: one durable queue ledger,
+  delete-on-ack.
+- Avoids surprising users with Kafka-like durable subscription semantics in
+  the queue path.
+- Keeps group membership, heartbeats, member assignment, and per-group
+  in-flight state local to connected consumers.
+- Leaves room for durable subscriptions as an explicit future product area
+  instead of accidentally coupling them to queue ack/delete semantics.
+
+### Consequences
+
+- Restarting the broker drops queue-mode group membership and group fan-out
+  state.
+- Re-created groups do not receive historical per-group fan-out from before
+  restart.
+- A group ack deletes the underlying durable queue message.
+- Consumer-group retry attempt durability is not a separate persistence
+  requirement unless durable subscriptions are later scoped.
