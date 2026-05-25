@@ -136,10 +136,10 @@ human review.
 
 8. **Add protocol/client coverage for admin synchronization needs**
    - Type: AFK
-   - Why: ack/nack have no response frame, so tests currently use admin
+   - Why: ack/nack have no response frame, so tests use `QueueList` admin
      roundtrips or connection close for synchronization.
-   - Shape: decide whether this remains a test technique or whether the protocol
-     should expose ack/nack responses in a future protocol PRD.
+   - Shape: keep `QueueList` as the documented same-connection synchronization
+     point; create a future protocol PRD before adding ack/nack responses.
 
 ## Priority Recommendation
 

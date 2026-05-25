@@ -229,7 +229,7 @@ func ack(t *testing.T, conn net.Conn, messageID string) {
 	}
 }
 
-func queueListRoundTrip(t *testing.T, conn net.Conn) {
+func queueListRoundTrip(t *testing.T, conn net.Conn) *protocol.QueueListResponse {
 	t.Helper()
 	req := &protocol.QueueListRequest{}
 	data, _ := proto.Marshal(req)
@@ -249,6 +249,16 @@ func queueListRoundTrip(t *testing.T, conn net.Conn) {
 	if err := proto.Unmarshal(frame.Payload, &resp); err != nil {
 		t.Fatalf("unmarshal queue list response: %v", err)
 	}
+	return &resp
+}
+
+func queueInfo(resp *protocol.QueueListResponse, name string) *protocol.QueueInfo {
+	for _, q := range resp.Queues {
+		if q.Name == name {
+			return q
+		}
+	}
+	return nil
 }
 
 func heartbeatRoundTrip(t *testing.T, conn net.Conn, queue, group string) {
@@ -333,6 +343,49 @@ func TestFullPublishConsumeCycle(t *testing.T) {
 	}
 	if q.InFlightLen() != 0 {
 		t.Fatalf("expected in-flight 0, got %d", q.InFlightLen())
+	}
+}
+
+func TestQueueListRoundTripSynchronizesAckAndNack(t *testing.T) {
+	_, _, addr := testBroker(t)
+	conn := dial(t, addr)
+
+	ackedID := publish(t, conn, "admin-sync-ack", []byte("ack me"))
+	subscribe(t, conn, "admin-sync-ack", 30)
+	acked := receiveMessage(t, conn)
+	if acked.MessageId != ackedID {
+		t.Fatalf("expected ack message %s, got %s", ackedID, acked.MessageId)
+	}
+	ack(t, conn, acked.MessageId)
+
+	ackResp := queueListRoundTrip(t, conn)
+	ackInfo := queueInfo(ackResp, "admin-sync-ack")
+	if ackInfo == nil {
+		t.Fatal("admin-sync-ack queue missing from queue list")
+	}
+	if ackInfo.MessageCount != 0 || ackInfo.InFlightCount != 0 {
+		t.Fatalf("expected acked queue to be empty after admin roundtrip, got pending=%d in_flight=%d", ackInfo.MessageCount, ackInfo.InFlightCount)
+	}
+
+	nackedID := publish(t, conn, "admin-sync-nack", []byte("drop me"))
+	subscribe(t, conn, "admin-sync-nack", 30)
+	nacked := receiveMessage(t, conn)
+	if nacked.MessageId != nackedID {
+		t.Fatalf("expected nack message %s, got %s", nackedID, nacked.MessageId)
+	}
+	nack(t, conn, nacked.MessageId, false)
+
+	nackResp := queueListRoundTrip(t, conn)
+	nackInfo := queueInfo(nackResp, "admin-sync-nack")
+	if nackInfo == nil {
+		t.Fatal("admin-sync-nack queue missing from queue list")
+	}
+	if nackInfo.MessageCount != 0 || nackInfo.InFlightCount != 0 {
+		t.Fatalf("expected nacked queue to be empty after admin roundtrip, got pending=%d in_flight=%d", nackInfo.MessageCount, nackInfo.InFlightCount)
+	}
+	dlqInfo := queueInfo(nackResp, "admin-sync-nack.dlq")
+	if dlqInfo == nil || dlqInfo.MessageCount != 1 {
+		t.Fatalf("expected admin-sync-nack.dlq to contain 1 message after admin roundtrip")
 	}
 }
 

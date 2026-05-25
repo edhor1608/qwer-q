@@ -1076,3 +1076,43 @@ the marker for backward compatibility.
 - New explicit unlimited queue configs recover as unlimited.
 - Future zero-valued scalar config fields should get their own presence marker
   if they need to distinguish default from explicit zero.
+
+---
+
+## DEC-038: QueueList Is The Ack/Nack Synchronization Roundtrip
+
+**Date:** 2026-05-25
+**Status:** Decided
+
+### Context
+
+`Ack` and `Nack` frames intentionally have no success response in the current
+binary protocol. Tests and simple clients sometimes need a deterministic point
+after those frames have been processed before asserting queue state.
+
+The server processes frames sequentially per connection, and `QueueList` is an
+admin operation with a response frame.
+
+### Decision
+
+Use `QueueList` as the admin roundtrip synchronization point for ack/nack
+state when a client needs confirmation through the existing protocol.
+
+Do not add ack/nack success responses in the current protocol. If clients need
+first-class ack/nack response frames later, create a protocol compatibility PRD
+before implementation.
+
+### Rationale
+
+- Avoids changing the wire protocol for a testing/synchronization need.
+- Uses an existing response-bearing admin operation.
+- Keeps ack/nack hot-path frames small and one-way.
+
+### Consequences
+
+- A `QueueList` response on the same connection confirms all earlier frames on
+  that connection have been handled by the server loop.
+- Tests can use the roundtrip instead of sleeps when asserting post-ack/nack
+  queue state.
+- This does not turn `QueueList` into a transactional barrier across other
+  connections.
