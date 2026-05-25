@@ -1,15 +1,10 @@
-bench/go.mod
-  s_2efdd75b4a3d60::t_2e6fef229bfac5 1-4,71-72
-  s_2efdd75b4a3d60::t_f0cc7293680d14 5-70
-bench/go.sum
-  ai_agent 1-296
-go.mod
-  s_2efdd75b4a3d60::t_46c9ac0a831701 12,21,39,43
+docs/plans/2026-05-25-linear-project-navigation.md
+  s_2efdd75b4a3d60::t_4929e472b872d7 1-60
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.5.0",
-  "base_commit_sha": "6228e0e0de950886107d693d3282d9e0c13cf1e1",
+  "base_commit_sha": "2aecbc0b2987f86bbbae64f5fb87b840e45b5c17",
   "prompts": {},
   "sessions": {
     "s_2efdd75b4a3d60": {
