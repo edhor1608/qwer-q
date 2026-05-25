@@ -1,0 +1,21 @@
+internal/broker/dlq.go
+  s_2efdd75b4a3d60::t_019f29c232dd02 78-86
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_9c3b92dac903c1 494-530
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "69bbc6284751aec2553f4715efcd314e91883269",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
