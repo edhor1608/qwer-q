@@ -437,6 +437,25 @@ func (q *Queue) Peek(n int) []*Message {
 	return result
 }
 
+// Remove deletes a queued or in-flight message by ID.
+func (q *Queue) Remove(messageID string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i, msg := range q.messages {
+		if msg.ID == messageID {
+			copy(q.messages[i:], q.messages[i+1:])
+			q.messages[len(q.messages)-1] = nil
+			q.messages = q.messages[:len(q.messages)-1]
+			return true
+		}
+	}
+	if _, ok := q.inFlight[messageID]; ok {
+		delete(q.inFlight, messageID)
+		return true
+	}
+	return false
+}
+
 // Purge removes all messages from the queue and returns the count removed.
 func (q *Queue) Purge() int {
 	q.mu.Lock()

@@ -3,11 +3,14 @@ package test
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jonas/qwer-q/internal/api"
 	"github.com/jonas/qwer-q/internal/broker"
 	"github.com/jonas/qwer-q/internal/protocol"
 	"github.com/jonas/qwer-q/internal/storage"
@@ -55,6 +58,21 @@ func testPersistentBroker(t *testing.T, dataDir string) (*broker.Broker, *broker
 	}
 	t.Cleanup(cleanup)
 	return b, s, s.Addr().String(), cleanup
+}
+
+func apiRequest(t *testing.T, b *broker.Broker, s *broker.Server, method, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	h := api.New(b, s.Registry())
+	defer h.Close()
+	mux := http.NewServeMux()
+	h.Register(mux)
+	req := httptest.NewRequest(method, path, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code >= 400 {
+		t.Fatalf("%s %s returned %d: %s", method, path, rec.Code, rec.Body.String())
+	}
+	return rec
 }
 
 // dial opens a TCP connection to the broker.
@@ -141,6 +159,15 @@ func subscribe(t *testing.T, conn net.Conn, queue string, visibilityTimeout uint
 	}
 }
 
+func subscribeGroup(t *testing.T, conn net.Conn, queue, group string, visibilityTimeout uint32) {
+	t.Helper()
+	req := &protocol.ConsumeRequest{Queue: queue, VisibilityTimeout: visibilityTimeout, Group: &group}
+	data, _ := proto.Marshal(req)
+	if _, err := conn.Write(protocol.EncodeFrame(protocol.OpConsume, data)); err != nil {
+		t.Fatalf("write group consume: %v", err)
+	}
+}
+
 // receiveMessage reads the next OpMessage from the connection.
 func receiveMessage(t *testing.T, conn net.Conn) *protocol.Message {
 	t.Helper()
@@ -221,6 +248,19 @@ func queueListRoundTrip(t *testing.T, conn net.Conn) {
 	var resp protocol.QueueListResponse
 	if err := proto.Unmarshal(frame.Payload, &resp); err != nil {
 		t.Fatalf("unmarshal queue list response: %v", err)
+	}
+}
+
+func heartbeatRoundTrip(t *testing.T, conn net.Conn, queue, group string) {
+	t.Helper()
+	req := &protocol.HeartbeatRequest{Queue: queue, Group: group}
+	data, _ := proto.Marshal(req)
+	if _, err := conn.Write(protocol.EncodeFrame(protocol.OpHeartbeat, data)); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	frame := readFrame(t, conn)
+	if frame.OpCode != protocol.OpHeartbeatAck {
+		t.Fatalf("expected OpHeartbeatAck, got %v", frame.OpCode)
 	}
 }
 
@@ -424,6 +464,155 @@ func TestVisibilityTimeoutRedeliverySurvivesBrokerRestart(t *testing.T) {
 	recovered := receiveMessage(t, restartedConn)
 	if recovered.MessageId != msgID {
 		t.Fatalf("expected visibility message %s after restart, got %s", msgID, recovered.MessageId)
+	}
+}
+
+func TestDLQMessageSurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "restart-dlq", []byte("poison"))
+	subscribe(t, conn, "restart-dlq", 30)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	nack(t, conn, msg.MessageId, false)
+	conn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "restart-dlq.dlq", 30)
+	recovered := receiveMessage(t, restartedConn)
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected DLQ message %s after restart, got %s", msgID, recovered.MessageId)
+	}
+}
+
+func TestDLQRetrySurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	b, s, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "retry-dlq", []byte("retry later"))
+	subscribe(t, conn, "retry-dlq", 30)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	nack(t, conn, msg.MessageId, false)
+	queueListRoundTrip(t, conn)
+	conn.Close()
+
+	apiRequest(t, b, s, http.MethodPost, "/api/v1/queues/retry-dlq/dlq/retry")
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "retry-dlq", 30)
+	recovered, ok := receiveMessageWithTimeout(t, restartedConn, 200*time.Millisecond)
+	if !ok {
+		t.Fatal("retried DLQ message was not recovered on original queue after restart")
+	}
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected retried message %s after restart, got %s", msgID, recovered.MessageId)
+	}
+}
+
+func TestQueuePurgeSurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	b, s, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "purge-queue", []byte("delete me"))
+	conn.Close()
+
+	apiRequest(t, b, s, http.MethodDelete, "/api/v1/queues/purge-queue")
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "purge-queue", 30)
+	if msg, ok := receiveMessageWithTimeout(t, restartedConn, 200*time.Millisecond); ok {
+		t.Fatalf("purged message recovered after restart: got %s, want not %s", msg.MessageId, msgID)
+	}
+}
+
+func TestDLQPurgeSurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	b, s, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "purge-dlq", []byte("delete poison"))
+	subscribe(t, conn, "purge-dlq", 30)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	nack(t, conn, msg.MessageId, false)
+	queueListRoundTrip(t, conn)
+	conn.Close()
+
+	apiRequest(t, b, s, http.MethodDelete, "/api/v1/queues/purge-dlq/dlq")
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "purge-dlq.dlq", 30)
+	if msg, ok := receiveMessageWithTimeout(t, restartedConn, 200*time.Millisecond); ok {
+		t.Fatalf("purged DLQ message recovered after restart: got %s, want not %s", msg.MessageId, msgID)
+	}
+}
+
+func TestConsumerGroupMembershipIsEphemeralAcrossBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	groupConn := dial(t, addr)
+	producerConn := dial(t, addr)
+
+	subscribeGroup(t, groupConn, "restart-group", "workers", 30)
+	heartbeatRoundTrip(t, groupConn, "restart-group", "workers")
+	msgID := publish(t, producerConn, "restart-group", []byte("group work"))
+	msg := receiveMessage(t, groupConn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected group message %s, got %s", msgID, msg.MessageId)
+	}
+	groupConn.Close()
+	producerConn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedGroupConn := dial(t, restartedAddr)
+	defer restartedGroupConn.Close()
+
+	// Group membership is ephemeral, so a fresh group subscriber does not inherit
+	// earlier pending deliveries after restart.
+	subscribeGroup(t, restartedGroupConn, "restart-group", "workers", 30)
+	if msg, ok := receiveMessageWithTimeout(t, restartedGroupConn, 200*time.Millisecond); ok {
+		t.Fatalf("ephemeral group membership recovered message after restart: %s", msg.MessageId)
+	}
+
+	restartedQueueConn := dial(t, restartedAddr)
+	defer restartedQueueConn.Close()
+	subscribe(t, restartedQueueConn, "restart-group", 30)
+	recovered := receiveMessage(t, restartedQueueConn)
+	if recovered.MessageId != msgID {
+		t.Fatalf("expected durable queue message %s after restart, got %s", msgID, recovered.MessageId)
 	}
 }
 
