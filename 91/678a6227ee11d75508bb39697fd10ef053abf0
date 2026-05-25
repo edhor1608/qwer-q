@@ -1,0 +1,29 @@
+internal/storage/badger_test.go
+  s_2efdd75b4a3d60::t_4be0c7c0a7a67f 105-149
+  s_2efdd75b4a3d60::t_57296dfe3d79ee 5
+internal/broker/dlq.go
+  s_2efdd75b4a3d60::t_6da34c93ecd9fe 80
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_ca538a67be9e4f 5
+  s_2efdd75b4a3d60::t_79deb9032144ad 450-493,520-521,541-544
+internal/storage/badger.go
+  s_2efdd75b4a3d60::t_54d8a75318c3a7 160,162-173,175-182,184-186,188
+internal/broker/queue.go
+  s_2efdd75b4a3d60::t_ffa72076a7bb5d 440-456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "91678a6227ee11d75508bb39697fd10ef053abf0",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
