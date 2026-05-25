@@ -108,7 +108,8 @@ Current implementation notes:
 - If retry-state persistence fails during nack requeue, nack fails and the
   message remains in-flight for the current broker process.
 - Visibility-timeout retry attempt durability is tracked separately in EDH-380.
-- Consumer-group retry attempt durability is tracked separately in EDH-381.
+- Consumer-group retry attempts follow DEC-035: they are group-specific runtime
+  delivery state and do not survive broker restart.
 
 ### Nacked Without Requeue
 
@@ -193,6 +194,8 @@ Contract:
 
 - Connected group members are ephemeral.
 - Group membership, heartbeats, member assignment, and per-member in-flight state
+  do not survive broker restart.
+- Consumer-group retry attempts are group-specific runtime delivery state and
   do not survive broker restart.
 - Queue-mode durable storage persists messages, not named group subscriptions.
 - A restart may require consumers to reconnect and rejoin groups.
