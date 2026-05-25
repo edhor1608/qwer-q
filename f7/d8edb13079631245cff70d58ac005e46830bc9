@@ -1,0 +1,21 @@
+test/integration_test.go
+  s_2efdd75b4a3d60::t_d5b312057eef97 13,35-48,50-52,54-55,275-286,288-295
+  s_2efdd75b4a3d60::t_e855bebb57feb2 185-202,296-322
+  s_2efdd75b4a3d60::t_16a8f93e305ff9 287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "f7d8edb13079631245cff70d58ac005e46830bc9",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
