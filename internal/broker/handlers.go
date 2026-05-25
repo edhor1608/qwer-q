@@ -117,20 +117,36 @@ func (b *Broker) HandleAck(req *protocol.AckRequest, queueName, groupName string
 
 // HandleNack processes a nack request.
 // If groupName is non-empty, nack within that group.
-func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName string) bool {
+func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName string) (bool, error) {
 	q := b.GetQueue(queueName)
 	if q == nil {
-		return false
+		return false, nil
+	}
+
+	deleteDropped := func(*Message) error {
+		if b.storage == nil {
+			return nil
+		}
+		return b.storage.DeleteMessage(queueName, req.GetMessageId())
+	}
+	persistRequeue := func(msg *Message) error {
+		if b.storage == nil {
+			return nil
+		}
+		return b.storage.SaveMessage(msg)
 	}
 
 	if groupName != "" {
 		g := q.GetGroup(groupName)
 		if g == nil {
-			return false
+			return false, nil
 		}
-		result := g.Nack(req.GetMessageId(), req.GetRequeue(), q.MaxRetries(), q.FailurePolicy())
+		result, err := g.nackWithHooks(req.GetMessageId(), req.GetRequeue(), q.MaxRetries(), q.FailurePolicy(), deleteDropped)
+		if err != nil {
+			return false, err
+		}
 		if !result.Found {
-			return false
+			return false, nil
 		}
 		if result.ToDLQ && result.Message != nil {
 			dlqName := DLQName(queueName)
@@ -143,21 +159,15 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 				b.storage.SaveMessage(result.Message)
 			}
 		}
-		if result.Dropped && b.storage != nil {
-			if err := b.storage.DeleteMessage(queueName, req.GetMessageId()); err != nil {
-				LogError("failed to delete dropped group message from storage", err,
-					"queue", queueName,
-					"message_id", req.GetMessageId(),
-					"group", groupName,
-				)
-			}
-		}
-		return true
+		return true, nil
 	}
 
-	result := q.Nack(req.GetMessageId(), req.GetRequeue())
+	result, err := q.nackWithHooks(req.GetMessageId(), req.GetRequeue(), deleteDropped, persistRequeue)
+	if err != nil {
+		return false, err
+	}
 	if !result.Found {
-		return false
+		return false, nil
 	}
 
 	// Move to DLQ if needed
@@ -175,27 +185,8 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 			b.storage.SaveMessage(result.Message)
 		}
 	}
-	if result.Dropped && b.storage != nil {
-		if err := b.storage.DeleteMessage(queueName, req.GetMessageId()); err != nil {
-			LogError("failed to delete dropped message from storage", err,
-				"queue", queueName,
-				"message_id", req.GetMessageId(),
-			)
-		}
-	}
-	if req.GetRequeue() && !result.ToDLQ && !result.Dropped && result.Message != nil && b.storage != nil {
-		msgCopy := *result.Message
-		msgCopy.VisibleAt = time.Now()
-		if err := b.storage.SaveMessage(&msgCopy); err != nil {
-			LogError("failed to persist requeued message", err,
-				"queue", queueName,
-				"message_id", msgCopy.ID,
-				"visible_at", msgCopy.VisibleAt,
-			)
-		}
-	}
 
-	return true
+	return true, nil
 }
 
 // HandleExtendVisibility processes a visibility timeout extension request.

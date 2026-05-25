@@ -116,6 +116,8 @@ Contract:
 
 - With DLQ failure policy, the message moves durably to the DLQ.
 - With drop failure policy, the message is durably removed.
+- If durable deletion for a drop-policy terminal nack fails, nack fails and the
+  message remains in-flight for the current broker process.
 - With infinite retry policy, explicit reject semantics must be documented before
   further behavior changes.
 
@@ -234,14 +236,13 @@ These gaps are intentionally captured here so the follow-up TDD issues can turn
 them into failing behavior tests before implementation changes:
 
 1. Visibility-timeout retry attempt durability is not decided.
-2. Terminal nack storage failure propagation is not implemented.
-3. Nack requeue retry-state save failure propagation is not implemented.
-4. Queue config zero-value compatibility is not decided.
-5. Stream queue metadata save errors are ignored.
-6. Queue purge and DLQ purge do not delete durable message state.
-7. DLQ retry does not durably move messages from DLQ storage back to the
+2. Nack requeue retry-state save failure propagation is not implemented.
+3. Queue config zero-value compatibility is not decided.
+4. Stream queue metadata save errors are ignored.
+5. Queue purge and DLQ purge do not delete durable message state.
+6. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.
-8. Queue-mode consumer groups are runtime coordination only; durable independent
+7. Queue-mode consumer groups are runtime coordination only; durable independent
    group subscriptions are not implemented.
 
 ## Test Contract

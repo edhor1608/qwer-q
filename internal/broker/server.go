@@ -464,7 +464,12 @@ func (s *Server) handleNack(payload []byte, state *connState) []byte {
 		}
 	} else {
 		// Single-node mode
-		if !s.broker.HandleNack(&req, state.queueName, state.groupName) {
+		ok, err := s.broker.HandleNack(&req, state.queueName, state.groupName)
+		if err != nil {
+			LogError("nack failed", err, "queue", state.queueName)
+			return EncodeError(3, err.Error())
+		}
+		if !ok {
 			return EncodeError(4, "message not found")
 		}
 	}
