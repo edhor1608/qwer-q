@@ -990,3 +990,49 @@ mode offsets or a future durable-subscription PRD.
 - A group ack deletes the underlying durable queue message.
 - Consumer-group retry attempt durability is not a separate persistence
   requirement unless durable subscriptions are later scoped.
+
+---
+
+## DEC-036: Visibility-Timeout Attempts Are Runtime-Only
+
+**Date:** 2026-05-25
+**Status:** Decided
+
+### Context
+
+Visibility timeout redelivery is driven by the broker's background reaper.
+Persisting the delivery attempt counter every time a timeout expires would put
+storage writes on that background path and can amplify writes under slow or
+crashing consumers.
+
+Explicit nack/requeue is different: it is a client command and can persist the
+updated retry state at that command boundary.
+
+### Decision
+
+Keep attempts caused only by visibility-timeout redelivery as runtime-only
+state.
+
+Timeout redelivery increments the attempt visible to clients while the broker
+process is alive. If the broker restarts before the message is acked, the
+message is recovered from durable queue storage and its timeout-only attempt
+increments reset to the persisted queue state.
+
+### Rationale
+
+- Avoids unbounded write amplification from the reaper loop.
+- Keeps the durable queue ledger focused on message existence and explicit
+  command boundaries.
+- Preserves at-least-once recovery: the message survives restart even though
+  timeout-only attempt increments do not.
+- Keeps explicit nack retry durability stronger than passive timeout retry
+  accounting.
+
+### Consequences
+
+- A slow consumer can see attempt 2 after a visibility timeout in the same
+  broker process.
+- The same message can be delivered as attempt 1 after restart if the only
+  previous increment came from visibility-timeout redelivery.
+- Max-retry enforcement for timeout-only redeliveries is process-local until a
+  future persisted timeout-attempt design is explicitly scoped.

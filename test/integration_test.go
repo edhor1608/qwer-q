@@ -451,7 +451,13 @@ func TestVisibilityTimeoutRedeliverySurvivesBrokerRestart(t *testing.T) {
 	if msg.MessageId != msgID {
 		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
 	}
-	waitForMessageID(t, conn, msgID, 5*time.Second)
+	if msg.Attempt != 1 {
+		t.Fatalf("expected first visibility delivery attempt 1, got %d", msg.Attempt)
+	}
+	redelivered := waitForMessageID(t, conn, msgID, 5*time.Second)
+	if redelivered.Attempt != 2 {
+		t.Fatalf("expected visibility timeout redelivery attempt 2, got %d", redelivered.Attempt)
+	}
 	conn.Close()
 	closeBroker()
 
@@ -464,6 +470,9 @@ func TestVisibilityTimeoutRedeliverySurvivesBrokerRestart(t *testing.T) {
 	recovered := receiveMessage(t, restartedConn)
 	if recovered.MessageId != msgID {
 		t.Fatalf("expected visibility message %s after restart, got %s", msgID, recovered.MessageId)
+	}
+	if recovered.Attempt != 1 {
+		t.Fatalf("expected visibility timeout attempt to reset after restart, got %d", recovered.Attempt)
 	}
 }
 

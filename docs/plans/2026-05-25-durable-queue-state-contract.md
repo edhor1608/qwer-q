@@ -107,7 +107,9 @@ Current implementation notes:
   updated attempt state for restart recovery.
 - If retry-state persistence fails during nack requeue, nack fails and the
   message remains in-flight for the current broker process.
-- Visibility-timeout retry attempt durability is tracked separately in EDH-380.
+- Visibility-timeout retry attempts are runtime-only. Timeout redelivery can
+  increment attempts while the broker process is alive, but those increments
+  are not persisted across restart.
 - Consumer-group retry attempts follow DEC-035: they are group-specific runtime
   delivery state and do not survive broker restart.
 
@@ -245,12 +247,11 @@ Current implementation notes:
 These gaps are intentionally captured here so the follow-up TDD issues can turn
 them into failing behavior tests before implementation changes:
 
-1. Visibility-timeout retry attempt durability is not decided.
-2. Queue config zero-value compatibility is not decided.
-3. Queue purge and DLQ purge do not delete durable message state.
-4. DLQ retry does not durably move messages from DLQ storage back to the
+1. Queue config zero-value compatibility is not decided.
+2. Queue purge and DLQ purge do not delete durable message state.
+3. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.
-5. Queue-mode consumer groups are runtime coordination only by decision
+4. Queue-mode consumer groups are runtime coordination only by decision
    (DEC-035); durable independent group subscriptions are not implemented.
 
 ## Test Contract
