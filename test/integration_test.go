@@ -10,6 +10,7 @@ import (
 
 	"github.com/jonas/qwer-q/internal/broker"
 	"github.com/jonas/qwer-q/internal/protocol"
+	"github.com/jonas/qwer-q/internal/storage"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -29,6 +30,31 @@ func testBroker(t *testing.T) (*broker.Broker, *broker.Server, string) {
 		b.Close()
 	})
 	return b, s, addr
+}
+
+func testPersistentBroker(t *testing.T, dataDir string) (*broker.Broker, *broker.Server, string, func()) {
+	t.Helper()
+	store, err := storage.NewBadgerStorage(dataDir, storage.WithSyncInterval(0))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	b := broker.NewBroker(broker.WithStorage(store), broker.WithMemoryLimit(0))
+	if err := b.LoadFromStorage(); err != nil {
+		b.Close()
+		t.Fatalf("load storage: %v", err)
+	}
+	s := broker.NewServer(b)
+	go s.ListenAndServe("127.0.0.1:0")
+	s.WaitReady()
+	var cleanupOnce sync.Once
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			s.Close()
+			b.Close()
+		})
+	}
+	t.Cleanup(cleanup)
+	return b, s, s.Addr().String(), cleanup
 }
 
 // dial opens a TCP connection to the broker.
@@ -160,6 +186,28 @@ func ack(t *testing.T, conn net.Conn, messageID string) {
 	}
 }
 
+func queueListRoundTrip(t *testing.T, conn net.Conn) {
+	t.Helper()
+	req := &protocol.QueueListRequest{}
+	data, _ := proto.Marshal(req)
+	if _, err := conn.Write(protocol.EncodeFrame(protocol.OpQueueList, data)); err != nil {
+		t.Fatalf("write queue list: %v", err)
+	}
+	frame := readFrame(t, conn)
+	if frame.OpCode == protocol.OpError {
+		var errResp protocol.ErrorResponse
+		proto.Unmarshal(frame.Payload, &errResp)
+		t.Fatalf("queue list error: code=%d msg=%s", errResp.Code, errResp.Message)
+	}
+	if frame.OpCode != protocol.OpQueueListResp {
+		t.Fatalf("expected OpQueueListResp, got %v", frame.OpCode)
+	}
+	var resp protocol.QueueListResponse
+	if err := proto.Unmarshal(frame.Payload, &resp); err != nil {
+		t.Fatalf("unmarshal queue list response: %v", err)
+	}
+}
+
 // nack sends a NackRequest with requeue=true.
 func nack(t *testing.T, conn net.Conn, messageID string, requeue bool) {
 	t.Helper()
@@ -229,6 +277,57 @@ func TestFullPublishConsumeCycle(t *testing.T) {
 	}
 	if q.InFlightLen() != 0 {
 		t.Fatalf("expected in-flight 0, got %d", q.InFlightLen())
+	}
+}
+
+func TestPendingMessageSurvivesBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "restart-pending", []byte("survives restart"))
+	conn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "restart-pending", 30)
+	msg := receiveMessage(t, restartedConn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected recovered message %s, got %s", msgID, msg.MessageId)
+	}
+	if string(msg.Payload) != "survives restart" {
+		t.Fatalf("expected recovered payload %q, got %q", "survives restart", msg.Payload)
+	}
+}
+
+func TestAckedMessageDoesNotRecoverAfterBrokerRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	_, _, addr, closeBroker := testPersistentBroker(t, dataDir)
+	conn := dial(t, addr)
+
+	msgID := publish(t, conn, "restart-acked", []byte("processed"))
+	subscribe(t, conn, "restart-acked", 30)
+	msg := receiveMessage(t, conn)
+	if msg.MessageId != msgID {
+		t.Fatalf("expected message %s, got %s", msgID, msg.MessageId)
+	}
+	ack(t, conn, msg.MessageId)
+	queueListRoundTrip(t, conn)
+	conn.Close()
+	closeBroker()
+
+	_, _, restartedAddr, closeRestarted := testPersistentBroker(t, dataDir)
+	defer closeRestarted()
+	restartedConn := dial(t, restartedAddr)
+	defer restartedConn.Close()
+
+	subscribe(t, restartedConn, "restart-acked", 30)
+	if msg, ok := receiveMessageWithTimeout(t, restartedConn, 200*time.Millisecond); ok {
+		t.Fatalf("acked message recovered after restart: %s", msg.MessageId)
 	}
 }
 
