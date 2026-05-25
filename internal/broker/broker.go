@@ -208,7 +208,7 @@ func (b *Broker) LoadFromStorage() error {
 			return err
 		}
 		q := b.GetOrCreateQueue(name)
-		if cfg.MaxSize != 0 {
+		if cfg.MaxSizeSet || cfg.MaxSize != 0 {
 			q.SetMaxSize(cfg.MaxSize)
 		}
 		if cfg.MaxRetries != 0 {

@@ -247,11 +247,10 @@ Current implementation notes:
 These gaps are intentionally captured here so the follow-up TDD issues can turn
 them into failing behavior tests before implementation changes:
 
-1. Queue config zero-value compatibility is not decided.
-2. Queue purge and DLQ purge do not delete durable message state.
-3. DLQ retry does not durably move messages from DLQ storage back to the
+1. Queue purge and DLQ purge do not delete durable message state.
+2. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.
-4. Queue-mode consumer groups are runtime coordination only by decision
+3. Queue-mode consumer groups are runtime coordination only by decision
    (DEC-035); durable independent group subscriptions are not implemented.
 
 ## Test Contract

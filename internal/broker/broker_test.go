@@ -559,6 +559,50 @@ func TestBrokerLoadFromStorageRestoresQueueConfig(t *testing.T) {
 	}
 }
 
+func TestBrokerLoadFromStorageDisambiguatesZeroMaxSize(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-queue-config-zero-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("legacy-zero", storage.QueueConfig{MaxSize: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("explicit-zero", storage.QueueConfig{
+		MaxSize:    0,
+		MaxSizeSet: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+	if err := b.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	legacy := b.GetQueue("legacy-zero")
+	if legacy == nil {
+		t.Fatal("legacy-zero queue not restored")
+	}
+	if legacy.MaxSize() != DefaultMaxQueueSize {
+		t.Fatalf("expected legacy zero max size to recover default %d, got %d", DefaultMaxQueueSize, legacy.MaxSize())
+	}
+
+	explicit := b.GetQueue("explicit-zero")
+	if explicit == nil {
+		t.Fatal("explicit-zero queue not restored")
+	}
+	if explicit.MaxSize() != 0 {
+		t.Fatalf("expected explicit zero max size to recover unlimited, got %d", explicit.MaxSize())
+	}
+}
+
 func TestBrokerNackRequeuePersistsAttemptAcrossRestart(t *testing.T) {
 	dir, err := os.MkdirTemp("", "broker-retry-attempt-test-*")
 	if err != nil {

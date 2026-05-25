@@ -1036,3 +1036,43 @@ increments reset to the persisted queue state.
   previous increment came from visibility-timeout redelivery.
 - Max-retry enforcement for timeout-only redeliveries is process-local until a
   future persisted timeout-attempt design is explicitly scoped.
+
+---
+
+## DEC-037: Queue Config Uses An Explicit MaxSize Presence Flag
+
+**Date:** 2026-05-25
+**Status:** Decided
+
+### Context
+
+Queue config records are JSON-encoded in Badger. `max_size: 0` is ambiguous in
+old records because zero can mean either "field absent/default" or the queue
+model's explicit unlimited size.
+
+Existing records cannot be reliably reinterpreted without risking accidental
+unlimited queues after upgrade.
+
+### Decision
+
+Treat legacy queue config records with `max_size: 0` and no presence marker as
+unset/default.
+
+Encode an explicit unlimited queue size as `max_size: 0` plus
+`max_size_set: true`. Non-zero `max_size` values remain valid with or without
+the marker for backward compatibility.
+
+### Rationale
+
+- Preserves existing Badger data safely.
+- Adds one narrow presence flag instead of changing the storage format or
+  making `QueueConfig` pointer-heavy.
+- Keeps the queue contract unchanged: `MaxSize == 0` still means unlimited when
+  explicitly configured.
+
+### Consequences
+
+- Old zero-valued queue config records recover with the default max queue size.
+- New explicit unlimited queue configs recover as unlimited.
+- Future zero-valued scalar config fields should get their own presence marker
+  if they need to distinguish default from explicit zero.

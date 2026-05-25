@@ -16,6 +16,7 @@ const (
 // QueueConfig holds queue configuration.
 type QueueConfig struct {
 	MaxSize       int    `json:"max_size"`
+	MaxSizeSet    bool   `json:"max_size_set,omitempty"`
 	MaxRetries    int    `json:"max_retries"`
 	FailurePolicy string `json:"failure_policy"` // "dlq", "drop", "infinite"
 
