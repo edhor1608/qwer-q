@@ -185,6 +185,8 @@ Contract:
   do not survive broker restart.
 - Queue-mode durable storage persists messages, not named group subscriptions.
 - A restart may require consumers to reconnect and rejoin groups.
+- Re-created groups do not receive historical group fan-out from before restart;
+  the underlying queue message remains queue work unless it was acked.
 
 Current implementation notes:
 
