@@ -1,0 +1,32 @@
+internal/broker/broker_test.go
+  s_2efdd75b4a3d60::t_7dea9350b9f0e5 509-538,540-559,562-564
+  s_2efdd75b4a3d60::t_84d1c48e0b4574 539,560-561
+  s_2efdd75b4a3d60::t_8fcec451a3ead7 469-508,612
+  s_2efdd75b4a3d60::t_2937788607f13c 649-673
+internal/broker/handlers.go
+  s_2efdd75b4a3d60::t_b2fc565594723c 187-188
+  s_2efdd75b4a3d60::t_1fa116b18bdc47 147-153,179-184,189-195
+  s_2efdd75b4a3d60::t_f87a82fdbce21c 186
+internal/broker/broker.go
+  s_2efdd75b4a3d60::t_74bf3ca11ca17e 211-219
+  s_2efdd75b4a3d60::t_91d4bfa6c5987d 262-267
+docs/plans/2026-05-25-durable-queue-state-contract.md
+  s_2efdd75b4a3d60::t_7f2513dcfe5459 127-128,228-229,236-240
+  s_2efdd75b4a3d60::t_5798afdebb5b5e 106-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "767add22520343da57e8e8c94f5f766453c3827e",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
