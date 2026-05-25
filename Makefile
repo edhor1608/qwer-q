@@ -1,4 +1,4 @@
-.PHONY: build test run clean lint docker-up docker-down docker-clean docker-restart bench bench-all
+.PHONY: build test run clean lint docker-up docker-down docker-clean docker-restart bench-test bench bench-all
 
 BINARY=bin/qwer-q
 
@@ -34,16 +34,19 @@ docker-restart:
 	@echo "Fresh restart complete"
 
 # Benchmark (runs against fresh container)
+bench-test:
+	cd bench && go test -race ./...
+
 bench:
 	docker compose down -v
 	docker compose up -d --build
 	@sleep 3
-	go run bench/cmd/stress/main.go --queues=qwerq --tests=sustained --duration=30s
+	cd bench && go run ./cmd/stress --queues=qwerq --tests=sustained --duration=30s
 
 bench-all:
 	docker compose down -v
 	docker compose up -d --build
 	@sleep 3
-	go run bench/cmd/stress/main.go --queues=qwerq --tests=all --duration=30s
+	cd bench && go run ./cmd/stress --queues=qwerq --tests=all --duration=30s
 
 .DEFAULT_GOAL := build
