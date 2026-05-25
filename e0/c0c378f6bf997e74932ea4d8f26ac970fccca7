@@ -1,0 +1,24 @@
+test/integration_test.go
+  s_2efdd75b4a3d60::t_f1ef3b5a8b33c4 349-391
+  s_2efdd75b4a3d60::t_7b7d137fe24bf3 232,252-261
+docs/plans/decisions-log.md
+  s_2efdd75b4a3d60::t_c0f037d21368f5 1079-1118
+docs/plans/2026-05-25-implementation-issue-map.md
+  s_2efdd75b4a3d60::t_5c62b3210933fd 139,141-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "e0c0c378f6bf997e74932ea4d8f26ac970fccca7",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
