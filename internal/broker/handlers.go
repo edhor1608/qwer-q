@@ -293,7 +293,10 @@ func (b *Broker) HandleStreamPublish(req *protocol.PublishRequest) (*protocol.Pu
 		PublishedAt: now,
 	}
 
-	sq := b.GetOrCreateStreamQueue(req.GetQueue())
+	sq, err := b.GetOrCreateStreamQueueWithError(req.GetQueue())
+	if err != nil {
+		return nil, 0, err
+	}
 	seq, err := sq.Publish(msg)
 	if err != nil {
 		return nil, 0, err

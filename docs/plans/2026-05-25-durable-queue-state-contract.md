@@ -231,6 +231,8 @@ Current implementation notes:
 - Recovery only loads messages for queues present in stored queue metadata.
 - Queue-mode publish fails when auto-created queue metadata cannot be persisted.
 - New queue metadata is persisted with the current default queue config.
+- Stream publish fails when auto-created stream queue metadata cannot be
+  persisted.
 
 ## Known Gaps For Follow-Up Issues
 
@@ -239,11 +241,10 @@ them into failing behavior tests before implementation changes:
 
 1. Visibility-timeout retry attempt durability is not decided.
 2. Queue config zero-value compatibility is not decided.
-3. Stream queue metadata save errors are ignored.
-4. Queue purge and DLQ purge do not delete durable message state.
-5. DLQ retry does not durably move messages from DLQ storage back to the
+3. Queue purge and DLQ purge do not delete durable message state.
+4. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.
-6. Queue-mode consumer groups are runtime coordination only; durable independent
+5. Queue-mode consumer groups are runtime coordination only; durable independent
    group subscriptions are not implemented.
 
 ## Test Contract

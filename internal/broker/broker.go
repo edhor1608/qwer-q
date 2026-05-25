@@ -275,17 +275,23 @@ func (b *Broker) GetOrCreateQueueWithError(name string) (*Queue, error) {
 
 // GetOrCreateStreamQueue returns the stream queue with the given name, creating it if needed.
 func (b *Broker) GetOrCreateStreamQueue(name string) *StreamQueue {
+	sq, _ := b.GetOrCreateStreamQueueWithError(name)
+	return sq
+}
+
+// GetOrCreateStreamQueueWithError returns the stream queue with the given name, creating it if needed.
+func (b *Broker) GetOrCreateStreamQueueWithError(name string) (*StreamQueue, error) {
 	b.mu.RLock()
 	sq, ok := b.streamQueues[name]
 	b.mu.RUnlock()
 	if ok {
-		return sq
+		return sq, nil
 	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if sq, ok = b.streamQueues[name]; ok {
-		return sq
+		return sq, nil
 	}
 
 	var streamStore storage.StreamStorage
@@ -296,14 +302,16 @@ func (b *Broker) GetOrCreateStreamQueue(name string) *StreamQueue {
 	}
 
 	sq = NewStreamQueue(name, streamStore)
-	b.streamQueues[name] = sq
 
 	// Persist queue config
 	if b.storage != nil {
-		b.storage.SaveQueue(name, storage.QueueConfig{Mode: storage.QueueModeStream})
+		if err := b.storage.SaveQueue(name, storage.QueueConfig{Mode: storage.QueueModeStream}); err != nil {
+			return nil, err
+		}
 	}
+	b.streamQueues[name] = sq
 
-	return sq
+	return sq, nil
 }
 
 // GetStreamQueue returns the stream queue with the given name, or nil if not found.

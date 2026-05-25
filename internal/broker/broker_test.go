@@ -501,6 +501,24 @@ func TestBrokerPublishFailsWhenQueueMetadataSaveFails(t *testing.T) {
 	}
 }
 
+func TestBrokerStreamPublishFailsWhenQueueMetadataSaveFails(t *testing.T) {
+	saveQueueErr := errors.New("save queue failed")
+	store := &retryDLQFailingStorage{saveQueueErr: saveQueueErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	_, _, err := b.HandleStreamPublish(&protocol.PublishRequest{
+		Queue:   "stream-metadata-fail",
+		Payload: []byte("event"),
+	})
+	if !errors.Is(err, saveQueueErr) {
+		t.Fatalf("expected queue metadata error, got %v", err)
+	}
+	if sq := b.GetStreamQueue("stream-metadata-fail"); sq != nil {
+		t.Fatal("expected stream queue not to exist after metadata save failure")
+	}
+}
+
 func TestBrokerLoadFromStorageRestoresQueueConfig(t *testing.T) {
 	dir, err := os.MkdirTemp("", "broker-queue-config-test-*")
 	if err != nil {
