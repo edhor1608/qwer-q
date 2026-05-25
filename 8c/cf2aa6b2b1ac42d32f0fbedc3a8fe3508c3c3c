@@ -1,0 +1,21 @@
+bench/README.md
+  s_2efdd75b4a3d60::t_ba4e16c35b1f51 19-22,28-29,32,35-48,102-105,143-144,146,149,152,155,158,161,164
+Makefile
+  s_2efdd75b4a3d60::t_270738ad5e1a3e 1,37-39,44,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "8ccf2aa6b2b1ac42d32f0fbedc3a8fe3508c3c3c",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
