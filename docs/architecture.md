@@ -156,6 +156,107 @@ HTTP endpoints should preserve the same broker semantics as the TCP protocol.
 Admin operations that mutate queue state should go through broker methods rather
 than duplicating storage or queue logic in handlers.
 
+## Common Change Paths
+
+Use these paths to keep small changes small. Start at the responsibility that
+owns the user-visible behavior, then move outward only when the behavior crosses
+another responsibility.
+
+### Protocol Operation
+
+Start with the protocol contract:
+
+- frame opcode and payload shape
+- protobuf message fields
+- server dispatch behavior
+- client support
+
+Good tests exercise a real encoded frame or public client call. Avoid tests that
+only assert helper function shape unless the helper is the protocol contract.
+
+### Queue Semantics
+
+Start with broker and queue behavior:
+
+- publish/consume/ack/nack
+- visibility timeout and redelivery
+- retry policy and DLQ movement
+- ordering keys
+- consumer groups
+
+Good tests publish and consume through TCP or stable broker methods, then assert
+observable delivery behavior. For restart-sensitive changes, use a real storage
+directory and restart the broker in the test.
+
+### Storage And Recovery
+
+Start with the durable queue state contract:
+
+- what must survive restart
+- what must be deleted durably
+- what runtime state is intentionally ephemeral
+- how storage errors should affect the public result
+
+Good tests prove behavior before and after restart. Storage unit tests are useful
+for adapter details, but they are not enough to prove broker durability.
+
+### HTTP API And Dashboard
+
+Start with the broker operation the endpoint should represent:
+
+- queue purge
+- DLQ retry or purge
+- schema inspection
+- stats and consumer visibility
+
+Operator mutations should call broker methods. The handler should not duplicate
+queue/storage state transitions. Good tests use HTTP requests and then verify
+the broker-visible result.
+
+### Client Behavior
+
+Start with the public client workflow:
+
+- connection setup
+- publish
+- consume
+- ack/nack
+- schema registration
+- typed helper behavior
+
+Good tests use a real broker server when the behavior depends on protocol
+compatibility. Keep client-only unit tests for local encoding or type-safety
+helpers.
+
+### Benchmark Work
+
+Start in the `bench` module. Benchmark dependencies are measurement tooling, not
+runtime broker dependencies.
+
+Good benchmark changes keep the root module clean, document the command path,
+and state the durability mode behind any number. Release-facing claims must
+follow the benchmark claims policy.
+
+## High-Risk Behavior
+
+These areas need stronger behavior tests because they define the product promise
+or affect multiple runtime responsibilities:
+
+- restart recovery
+- ack/nack storage effects
+- DLQ move, retry, and purge
+- visibility timeout and redelivery
+- queue purge
+- consumer group runtime behavior
+- ordering guarantees
+- schema enforcement mode
+- auth gating
+- protocol compatibility
+- benchmark claim validity
+
+For these areas, prefer TDD with vertical tracer bullets: one externally visible
+behavior, one failing test, the smallest code change, then the next behavior.
+
 ## Preview Capabilities
 
 Stream mode and clustering are implemented but not product-defining today.
