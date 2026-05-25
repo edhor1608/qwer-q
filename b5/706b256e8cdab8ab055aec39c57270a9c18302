@@ -1,0 +1,25 @@
+.claude/agents/entire-search.md
+  s_2efdd75b4a3d60::t_53a3ac06638012 1-25
+.claude/settings.json
+  s_2efdd75b4a3d60::t_feac1b89a2eb9c 1-85
+.entire/settings.json
+  s_2efdd75b4a3d60::t_2e13f43334f2d7 1-4
+.gitignore
+  s_2efdd75b4a3d60::t_5c4912c98c5c3f 33-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "b5706b256e8cdab8ab055aec39c57270a9c18302",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
