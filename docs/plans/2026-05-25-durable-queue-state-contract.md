@@ -103,10 +103,10 @@ Contract:
 
 Current implementation notes:
 
-- Requeue updates runtime delivery state. The original stored message remains,
-  so restart recovery preserves at-least-once delivery.
-- Attempt count and visibility updates are not durably updated on requeue today,
-  so retry-limit behavior can reset after restart.
+- Queue-mode nack requeue updates runtime delivery state and persists the
+  updated attempt state for restart recovery.
+- Visibility-timeout retry attempt durability is tracked separately in EDH-380.
+- Consumer-group retry attempt durability is tracked separately in EDH-381.
 
 ### Nacked Without Requeue
 
@@ -124,8 +124,8 @@ Current implementation notes:
 - DLQ movement deletes the original queue storage entry and saves the message
   under the DLQ name.
 - Drop-policy terminal nack outcomes delete the original queue storage entry.
-- Non-DLQ terminal outcomes can leave the original stored message behind today,
-  which can make dropped messages reappear after restart.
+- Non-DLQ terminal outcomes other than drop-policy still need explicit product
+  semantics before further behavior changes.
 
 ### Dead Letter Queue
 
@@ -225,18 +225,19 @@ Contract:
 Current implementation notes:
 
 - Recovery only loads messages for queues present in stored queue metadata.
-- Queue metadata is saved when a queue is created, but errors are ignored.
+- Queue-mode publish fails when auto-created queue metadata cannot be persisted.
+- New queue metadata is persisted with the current default queue config.
 
 ## Known Gaps For Follow-Up Issues
 
 These gaps are intentionally captured here so the follow-up TDD issues can turn
 them into failing behavior tests before implementation changes:
 
-1. Publish mutates runtime state before storage success is known.
-2. Queue metadata save errors are ignored.
-3. Ack does not surface storage delete failures.
-4. Requeue does not persist attempt count or visibility updates.
-5. Terminal non-DLQ nack outcomes can leave stored messages behind.
+1. Visibility-timeout retry attempt durability is not decided.
+2. Terminal nack storage failure propagation is not implemented.
+3. Nack requeue retry-state save failure propagation is not implemented.
+4. Queue config zero-value compatibility is not decided.
+5. Stream queue metadata save errors are ignored.
 6. Queue purge and DLQ purge do not delete durable message state.
 7. DLQ retry does not durably move messages from DLQ storage back to the
    original queue.

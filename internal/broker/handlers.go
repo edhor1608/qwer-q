@@ -144,7 +144,13 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 			}
 		}
 		if result.Dropped && b.storage != nil {
-			b.storage.DeleteMessage(queueName, req.GetMessageId())
+			if err := b.storage.DeleteMessage(queueName, req.GetMessageId()); err != nil {
+				LogError("failed to delete dropped group message from storage", err,
+					"queue", queueName,
+					"message_id", req.GetMessageId(),
+					"group", groupName,
+				)
+			}
 		}
 		return true
 	}
@@ -170,7 +176,23 @@ func (b *Broker) HandleNack(req *protocol.NackRequest, queueName, groupName stri
 		}
 	}
 	if result.Dropped && b.storage != nil {
-		b.storage.DeleteMessage(queueName, req.GetMessageId())
+		if err := b.storage.DeleteMessage(queueName, req.GetMessageId()); err != nil {
+			LogError("failed to delete dropped message from storage", err,
+				"queue", queueName,
+				"message_id", req.GetMessageId(),
+			)
+		}
+	}
+	if req.GetRequeue() && !result.ToDLQ && !result.Dropped && result.Message != nil && b.storage != nil {
+		msgCopy := *result.Message
+		msgCopy.VisibleAt = time.Now()
+		if err := b.storage.SaveMessage(&msgCopy); err != nil {
+			LogError("failed to persist requeued message", err,
+				"queue", queueName,
+				"message_id", msgCopy.ID,
+				"visible_at", msgCopy.VisibleAt,
+			)
+		}
 	}
 
 	return true

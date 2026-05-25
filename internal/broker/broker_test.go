@@ -466,6 +466,102 @@ func TestBrokerPublishFailsWhenQueueMetadataSaveFails(t *testing.T) {
 	}
 }
 
+func TestBrokerLoadFromStorageRestoresQueueConfig(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-queue-config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("configured", storage.QueueConfig{
+		MaxSize:       17,
+		MaxRetries:    3,
+		FailurePolicy: string(FailurePolicyDrop),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+	if err := b.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	q := b.GetQueue("configured")
+	if q == nil {
+		t.Fatal("queue not restored")
+	}
+	if q.MaxSize() != 17 {
+		t.Fatalf("expected max size 17, got %d", q.MaxSize())
+	}
+	if q.MaxRetries() != 3 {
+		t.Fatalf("expected max retries 3, got %d", q.MaxRetries())
+	}
+	if q.FailurePolicy() != FailurePolicyDrop {
+		t.Fatalf("expected failure policy drop, got %s", q.FailurePolicy())
+	}
+}
+
+func TestBrokerNackRequeuePersistsAttemptAcrossRestart(t *testing.T) {
+	dir, err := os.MkdirTemp("", "broker-retry-attempt-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	store, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveQueue("retry-attempt", storage.QueueConfig{}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBroker(WithStorage(store))
+	q := b.GetOrCreateQueue("retry-attempt")
+	resp, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "retry-attempt",
+		Payload: []byte("retry me"),
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ch := q.Dequeue(30 * time.Second)
+	first := <-ch
+	if first.Attempt != 1 {
+		t.Fatalf("expected first delivery attempt 1, got %d", first.Attempt)
+	}
+	q.RemoveConsumer(ch)
+	if !b.HandleNack(&protocol.NackRequest{MessageId: resp.MessageId, Requeue: true}, "retry-attempt", "") {
+		t.Fatal("nack failed")
+	}
+	b.Close()
+
+	store2, err := storage.NewBadgerStorage(dir)
+	if err != nil {
+		t.Fatalf("reopen storage: %v", err)
+	}
+	b2 := NewBroker(WithStorage(store2))
+	defer b2.Close()
+	if err := b2.LoadFromStorage(); err != nil {
+		t.Fatalf("load from storage: %v", err)
+	}
+
+	recovered := b2.GetQueue("retry-attempt")
+	if recovered == nil {
+		t.Fatal("queue not recovered")
+	}
+	next := <-recovered.Dequeue(30 * time.Second)
+	if next.Attempt != 2 {
+		t.Fatalf("expected retry attempt to survive restart and deliver attempt 2, got %d", next.Attempt)
+	}
+}
+
 func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
 	saveErr := errors.New("save failed")
 	store := &retryDLQFailingStorage{saveErr: saveErr}
@@ -513,7 +609,7 @@ func TestBrokerPublishDoesNotDeliverWhenStorageSaveFails(t *testing.T) {
 	select {
 	case msg := <-ch:
 		t.Fatalf("expected no delivery after storage failure, got %s", msg.ID)
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(50 * time.Millisecond):
 	}
 	if q.Len() != 0 {
 		t.Fatalf("expected queue to stay empty, got %d messages", q.Len())
@@ -547,6 +643,31 @@ func TestBrokerPublishRollsBackStorageWhenEnqueueFails(t *testing.T) {
 	}
 	if q.Len() != 1 {
 		t.Fatalf("expected queue to keep only existing message, got %d messages", q.Len())
+	}
+}
+
+func TestBrokerPublishReturnsRollbackErrorWhenEnqueueRollbackFails(t *testing.T) {
+	rollbackErr := errors.New("rollback failed")
+	store := &retryDLQFailingStorage{deleteRollbackErr: rollbackErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("publish-rollback-fail")
+	q.SetMaxSize(1)
+	if err := q.Enqueue(&Message{ID: "existing", Queue: "publish-rollback-fail", Payload: []byte("full")}); err != nil {
+		t.Fatalf("enqueue existing message: %v", err)
+	}
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		MessageId: proto.String("msg-1"),
+		Queue:     "publish-rollback-fail",
+		Payload:   []byte("overflow"),
+	})
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected queue full error, got %v", err)
+	}
+	if !errors.Is(err, rollbackErr) {
+		t.Fatalf("expected rollback error, got %v", err)
 	}
 }
 

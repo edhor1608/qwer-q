@@ -208,6 +208,15 @@ func (b *Broker) LoadFromStorage() error {
 			return err
 		}
 		q := b.GetOrCreateQueue(name)
+		if cfg.MaxSize != 0 {
+			q.SetMaxSize(cfg.MaxSize)
+		}
+		if cfg.MaxRetries != 0 {
+			q.SetMaxRetries(uint32(cfg.MaxRetries))
+		}
+		if cfg.FailurePolicy != "" {
+			q.SetFailurePolicy(FailurePolicy(cfg.FailurePolicy))
+		}
 		for _, sm := range storedMsgs {
 			msg := &Message{
 				ID:          sm.ID,
@@ -250,7 +259,12 @@ func (b *Broker) GetOrCreateQueueWithError(name string) (*Queue, error) {
 
 	// Persist queue config for recovery
 	if b.storage != nil {
-		if err := b.storage.SaveQueue(name, storage.QueueConfig{}); err != nil {
+		cfg := storage.QueueConfig{
+			MaxSize:       q.maxSize,
+			MaxRetries:    int(q.maxRetries),
+			FailurePolicy: string(q.failurePolicy),
+		}
+		if err := b.storage.SaveQueue(name, cfg); err != nil {
 			return nil, err
 		}
 	}
