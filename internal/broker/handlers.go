@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"errors"
 	"time"
 
 	"github.com/jonas/qwer-q/internal/protocol"
@@ -49,14 +50,18 @@ func (b *Broker) HandlePublish(req *protocol.PublishRequest) (*protocol.PublishR
 	}
 
 	q := b.GetOrCreateQueue(req.GetQueue())
-	if err := q.Enqueue(msg); err != nil {
-		return nil, err
-	}
-
 	if b.storage != nil {
 		if err := b.storage.SaveMessage(msg); err != nil {
 			return nil, err
 		}
+	}
+	if err := q.Enqueue(msg); err != nil {
+		if b.storage != nil {
+			if rbErr := b.storage.DeleteMessage(msg.Queue, msg.ID); rbErr != nil {
+				return nil, errors.Join(err, rbErr)
+			}
+		}
+		return nil, err
 	}
 
 	return &protocol.PublishResponse{MessageId: msgID}, nil

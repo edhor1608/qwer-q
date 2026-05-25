@@ -392,6 +392,63 @@ func TestBrokerRetryDLQDoesNotEnqueueWhenStorageSaveFails(t *testing.T) {
 	}
 }
 
+func TestBrokerPublishDoesNotDeliverWhenStorageSaveFails(t *testing.T) {
+	saveErr := errors.New("save failed")
+	store := &retryDLQFailingStorage{saveErr: saveErr}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("publish-fail")
+	ch := q.Dequeue(30 * time.Second)
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		Queue:   "publish-fail",
+		Payload: []byte("not durable"),
+	})
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("expected save error, got %v", err)
+	}
+
+	select {
+	case msg := <-ch:
+		t.Fatalf("expected no delivery after storage failure, got %s", msg.ID)
+	case <-time.After(10 * time.Millisecond):
+	}
+	if q.Len() != 0 {
+		t.Fatalf("expected queue to stay empty, got %d messages", q.Len())
+	}
+	if q.InFlightLen() != 0 {
+		t.Fatalf("expected no in-flight messages, got %d", q.InFlightLen())
+	}
+}
+
+func TestBrokerPublishRollsBackStorageWhenEnqueueFails(t *testing.T) {
+	store := &retryDLQFailingStorage{}
+	b := NewBroker(WithStorage(store))
+	defer b.Close()
+
+	q := b.GetOrCreateQueue("publish-full")
+	q.SetMaxSize(1)
+	if err := q.Enqueue(&Message{ID: "existing", Queue: "publish-full", Payload: []byte("full")}); err != nil {
+		t.Fatalf("enqueue existing message: %v", err)
+	}
+
+	_, err := b.HandlePublish(&protocol.PublishRequest{
+		MessageId: proto.String("msg-1"),
+		Queue:     "publish-full",
+		Payload:   []byte("overflow"),
+	})
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected queue full error, got %v", err)
+	}
+	if _, ok := store.saved["publish-full/msg-1"]; ok {
+		t.Fatal("expected failed publish storage write to be rolled back")
+	}
+	if q.Len() != 1 {
+		t.Fatalf("expected queue to keep only existing message, got %d messages", q.Len())
+	}
+}
+
 func TestBrokerRetryDLQDoesNotEnqueueWhenStorageDeleteFails(t *testing.T) {
 	deleteErr := errors.New("delete failed")
 	store := &retryDLQFailingStorage{deleteDLQErr: deleteErr}

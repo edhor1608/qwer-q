@@ -43,14 +43,17 @@ A pending message is accepted for a queue and not currently in-flight.
 Contract:
 
 - A successfully published message must be recoverable after broker restart.
+- With durable storage enabled, publish saves the message before exposing it to
+  runtime delivery.
+- If the durable save fails, publish fails and the message is not visible to
+  consumers.
+- If runtime enqueue fails after a durable save, the durable write is rolled
+  back and publish fails.
 - After restart, recovered queue-mode messages are eligible for delivery.
 - Queue mode does not provide replay after ack.
 
 Current implementation notes:
 
-- Publish currently enqueues in memory before saving to storage. If storage save
-  fails after enqueue, runtime state can temporarily contain a message that is
-  not durable.
 - Queue config persistence errors are currently ignored when queues are created.
 
 ### In-flight
