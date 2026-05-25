@@ -1,0 +1,27 @@
+bench/go.sum
+  ai_agent 69-70,214-215,218-223
+go.sum
+  ai_agent 186-193
+bench/go.mod
+  s_2efdd75b4a3d60::t_73e07e1f224015 3
+  s_2efdd75b4a3d60::t_ba89e7c9ed2630 27
+go.mod
+  s_2efdd75b4a3d60::t_73e07e1f224015 3
+  s_2efdd75b4a3d60::t_75a40c751a3fff 45-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "67451a423bd1180eaa062ea5b62242f6ddf0a632",
+  "prompts": {},
+  "sessions": {
+    "s_2efdd75b4a3d60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e5deb-595e-7542-9c0d-69e8b7d894d5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Jonas Rohde <edhor.jonas@gmail.com>"
+    }
+  }
+}
