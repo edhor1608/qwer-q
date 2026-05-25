@@ -17,3 +17,11 @@ ja das passt, agree
 Formuliere als Ziel, dass all diese offenen Todos (auch mögliche neue für diese Repo/Projekt) in der richtigen und sinnvollen Reihenfolge mit [$tdd](/Users/jonas/.agents/skills/engineering/tdd/SKILL.md) bearbeitet werden, dann als gt stack erstellt werden und im anschluss, nach ai review, diese review comments addressiert werden und dann alles wieder zusammen gemerged wird.
 
 Zusätzlich sollen neue Dinge, die gefunden werden auch als neue Issues/Todos festgehalten werden. Ich denke da an [$improve-codebase-architecture](/Users/jonas/.agents/skills/engineering/improve-codebase-architecture/SKILL.md) aber auch anderen Dinge die auf dem Weg auffallen. Nutze für neue Issues [$to-issues](/Users/jonas/.agents/skills/engineering/to-issues/SKILL.md) und für neue größere Bereiche [$to-prd](/Users/jonas/.agents/skills/engineering/to-prd/SKILL.md). Gern kann auch ein subagent für einen interne [$grill-with-docs](/Users/jonas/.agents/skills/engineering/grill-with-docs/SKILL.md) genutzt werden.
+
+---
+
+Was für dateien sind in dem claude codex und entire ordnern?
+
+---
+
+oke, push das gern mal
