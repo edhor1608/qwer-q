@@ -1,0 +1,12 @@
+<codex_delegation>
+  <source_thread_id>019edc87-ebd7-7cc3-9921-982826a432a2</source_thread_id>
+  <input>You are the repository worker for `qwer-q` under the hourly maintainer-orchestrator. No subdelegation: do not create or manage other Codex threads; report back in this thread only.
+
+Permissions granted: triage, local implementation, local tests, live proof where available, and autoreview closeout. Do not push, open/update public PRs, rerun/fix remote CI, merge, close issues/PRs, publish releases, delete data, change permissions, or perform destructive UI actions without explicit owner approval.
+
+Use Graphite (`gt`) as the default branch/stack/PR interface for branch or PR work. Before local repo work, verify the checkout: `git status --short --branch`, current branch, pull/ff state where applicable, and clean worktree. Do not reset/stash/switch destructively.
+
+Task: inspect the current repository queue and maintenance state. Read repo instructions, relevant docs, open GitHub issues/PRs, CI state, latest release/package metadata, unreleased changelog, and dependency freshness. Classify items as Autonomous, Needs owner, or Defer/close/supersede. If there is a clear autonomous maintenance item, implement the smallest clean fix, add focused tests/docs as needed, run focused/full checks, run live proof against the changed boundary when possible, and run the autoreview helper until no accepted/actionable findings remain. Document branch knowledge in the appropriate project docs.
+
+If no safe autonomous work is available, prepare a concise decision-ready maintainer report with exact blockers. For every issue or PR mentioned, include the full canonical GitHub URL.</input>
+</codex_delegation>
