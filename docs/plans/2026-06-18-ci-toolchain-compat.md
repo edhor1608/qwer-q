@@ -28,3 +28,7 @@ Go 1.24.13. That made the downgrade the wrong fix.
 Align CI and Docker with `go 1.26.4`. This is the smallest safe fix because it
 addresses the broken CI boundary without moving dependencies backward or
 converting the linter config to golangci-lint v2.
+
+Keep `govulncheck` as an explicit CI gate, but pin its version so vulnerability
+checks are reproducible and failures indicate either code risk or a deliberate
+tool update.

@@ -18,7 +18,7 @@ jobs:
           go-version: "1.26.4"
 
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
@@ -43,6 +43,8 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64.8
+          # Build the pinned v1 linter from source instead of using a prebuilt
+          # binary so the v1 config stays valid and type-checking matches Go 1.26.4.
           install-mode: goinstall
           args: --timeout=5m
 
