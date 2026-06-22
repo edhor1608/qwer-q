@@ -1,6 +1,6 @@
 module github.com/jonas/qwer-q
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/dgraph-io/badger/v4 v4.9.0
