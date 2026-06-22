@@ -15,11 +15,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.4"
+          go-version-file: go.mod
 
       - name: Run govulncheck
         # govulncheck fetches vuln.go.dev live, so new advisories can fail
         # unrelated PRs even with the analyzer version pinned.
+        continue-on-error: true
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.4.0 ./...
 
       - name: Run tests
@@ -39,14 +40,14 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.4"
+          go-version-file: go.mod
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64.8
           # Build the pinned v1 linter from source instead of using a prebuilt
-          # binary so the v1 config stays valid and type-checking matches Go 1.26.4.
+          # binary so the v1 config stays valid and type-checking matches the module Go version.
           install-mode: goinstall
           args: --timeout=5m
 
