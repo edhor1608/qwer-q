@@ -18,7 +18,9 @@ jobs:
           go-version: "1.26.4"
 
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+        # govulncheck fetches vuln.go.dev live, so new advisories can fail
+        # unrelated PRs even with the analyzer version pinned.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.4.0 ./...
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
